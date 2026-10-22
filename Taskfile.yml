@@ -55,3 +55,8 @@ tasks:
     desc: Export Databricks Genie Space instructions and Unity Catalog constraint DDLs
     cmds:
       - python3 -m lakehouse_engine.cli export-genie --configs-dir configs/examples --output-file genie_space_instructions.md
+
+  backfill:
+    desc: "Run historical batch backfill (Usage: task backfill CONFIG=configs/examples/subscriptions.yml START=2026-01-01 END=2026-03-31)"
+    cmds:
+      - python3 -m lakehouse_engine.cli backfill --config-path {{.CONFIG}} {{if .START}}--start-date {{.START}}{{end}} {{if .END}}--end-date {{.END}}{{end}}

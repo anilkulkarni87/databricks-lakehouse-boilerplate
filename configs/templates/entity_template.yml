@@ -37,6 +37,17 @@ gold:
   dlq_table: "enterprise_dw.domain.example_entities_dlq"
   track_rescued_data: true
 
+  # Phase 2: Declarative Data Quality Expectations
+  expectations:
+    - name: "valid_id_positive"
+      expr: "id > 0"
+      action: "fail_batch"
+      description: "Circuit breaker: ID must be positive."
+    - name: "valid_status"
+      expr: "status IN ('ACTIVE', 'PENDING', 'ARCHIVED')"
+      action: "quarantine"
+      description: "Quarantine rows with unexpected status codes."
+
   fields:
     - name: "id"
       type: "bigint"

@@ -21,6 +21,12 @@ class MetricDefinition(BaseModel):
     description: str = Field(..., description="Business definition and guidance for Genie queries")
     synonyms: List[str] = Field(default_factory=list, description="Common alternative names used in natural language")
 
+class ExpectationConfig(BaseModel):
+    name: str = Field(..., description="Data quality check name")
+    expr: str = Field(..., description="Boolean SQL validation expression that must evaluate to TRUE")
+    action: str = Field("quarantine", description="Action on failure: 'quarantine' (route to DLQ), 'warn' (log), 'fail_batch' (halt)")
+    description: Optional[str] = Field(None, description="Explanation of why this rule exists")
+
 class SourceConfig(BaseModel):
     catalog: str
     schema_name: str = Field(..., alias="schema")
@@ -52,10 +58,13 @@ class TargetTableConfig(BaseModel):
     foreign_keys: List[ForeignKeyReference] = []
     metrics: List[MetricDefinition] = []
 
-    # Phase 1 Production Hardening: DLQ & Rescued Data
+    # Phase 1: DLQ & Rescued Data
     enable_dlq: bool = Field(True, description="Enable automated Dead-Letter Queue quarantine for malformed records")
     dlq_table: Optional[str] = Field(None, description="Custom DLQ table FQDN. Defaults to <target_table>_dlq")
-    track_rescued_data: bool = Field(True, description="Preserves raw unmapped payload in _rescued_payload to prevent silent loss")
+    track_rescued_data: bool = Field(True, description="Preserves raw unmapped payload in _rescued_payload")
+
+    # Phase 2: Data Quality Expectations
+    expectations: List[ExpectationConfig] = Field(default_factory=list, description="Declarative data quality rules")
 
     @property
     def fqdn(self) -> str:

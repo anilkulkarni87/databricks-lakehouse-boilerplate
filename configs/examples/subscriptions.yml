@@ -13,7 +13,6 @@ runtime:
   trigger_type: "AvailableNow"
   max_mbytes_per_trigger: 2000
   checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/subscriptions"
-  # Phase 1: Centralized Operational Telemetry Audit Table
   audit_table: "saas_dw.operational_telemetry.batch_audit_log"
 
 # Non-PII Gold Curated Table
@@ -32,6 +31,21 @@ gold:
   enable_dlq: true
   dlq_table: "saas_dw.subscription_analytics.dim_subscriptions_dlq"
   track_rescued_data: true
+
+  # Phase 2: Declarative Data Quality Expectations
+  expectations:
+    - name: "valid_mrr_non_negative"
+      expr: "mrr_amount >= 0.0"
+      action: "fail_batch"
+      description: "Circuit breaker: Monthly Recurring Revenue cannot be negative."
+    - name: "valid_subscription_status"
+      expr: "status IN ('ACTIVE', 'PAST_DUE', 'CANCELLED', 'PAUSED')"
+      action: "quarantine"
+      description: "Unrecognized lifecycle status strings are quarantined to DLQ."
+    - name: "non_future_started_timestamp"
+      expr: "started_at <= current_timestamp()"
+      action: "warn"
+      description: "Logs warning if contract started_at is post-dated."
 
   # Kimball Dimensional Modeling & Genie Semantic Relationships
   foreign_keys:

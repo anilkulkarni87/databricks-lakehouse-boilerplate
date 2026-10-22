@@ -7,7 +7,7 @@
 
 A production-ready, metadata-driven framework for building scalable **Medallion Lakehouse Architectures** on Databricks.
 
-Instead of writing bespoke, repetitive pipeline code and compiling monolithic binaries for every new entity, this framework uses **declarative YAML definitions** evaluated by a generic, optimized PySpark streaming engine with **automated PII segregation**, **Databricks Liquid Clustering**, **Dead-Letter Queue (DLQ) quarantine**, **centralized micro-batch telemetry**, and **Databricks Genie AI semantic enrichment**.
+Instead of writing bespoke, repetitive pipeline code and compiling monolithic binaries for every new entity, this framework uses **declarative YAML definitions** evaluated by a generic, optimized PySpark streaming engine with **automated PII segregation**, **Databricks Liquid Clustering**, **declarative data quality expectations (circuit breakers)**, **Dead-Letter Queue (DLQ) quarantine**, **historical backfills**, **centralized micro-batch telemetry**, and **Databricks Genie AI semantic enrichment**.
 
 Works identically across **Databricks Enterprise (Unity Catalog)**, **Databricks Community Edition (100% Free Tier)**, and **local laptop PySpark environments**.
 
@@ -15,7 +15,7 @@ Works identically across **Databricks Enterprise (Unity Catalog)**, **Databricks
 
 ## 🎯 Architecture Diagram
 
-### 1. Medallion Data Flow with DLQ & Automated PII Split
+### 1. Medallion Data Flow with DLQ, Data Quality Expectations & PII Split
 
 ```mermaid
 flowchart TD
@@ -26,7 +26,8 @@ flowchart TD
     subgraph Engine ["Generic Lakehouse Engine (Wheel / CLI)"]
         MicroBatch["Structured Streaming Micro-Batch<br/>(Trigger.AvailableNow)"]
         Parser["Declarative YAML Evaluator<br/>(Pydantic validated)"]
-        DLQSplit{"Pre-MERGE Key Check<br/>(isNotNull & != '')"}
+        DLQSplit{"Primary Key Check<br/>(isNotNull & != '')"}
+        Expectations{"Data Quality Expectations<br/>- fail_batch (Circuit Breaker)<br/>- quarantine (To DLQ)<br/>- warn (Audit alert)"}
         Dedup["In-Batch Window Deduplication<br/>(row_number() == 1 over primary keys)"]
         AuditLog["Centralized Telemetry Logger<br/>(Emits batch duration, rows in/up, DLQ counts)"]
     end
@@ -51,7 +52,10 @@ flowchart TD
     MicroBatch --> Parser
     Parser --> DLQSplit
     DLQSplit -->|"Missing Primary Key"| DLQTable
-    DLQSplit -->|"Valid Records"| Dedup
+    DLQSplit -->|"Valid Primary Key"| Expectations
+    Expectations -->|"Quarantined Rows"| DLQTable
+    Expectations -->|"fail_batch Triggered"| Abort["Halt & Rollback Batch"]
+    Expectations -->|"Clean Records"| Dedup
     Dedup -->|"Extract non-PII metrics"| GoldTable
     Dedup -->|"Route sensitive identity fields"| PIITable
     GoldTable -.->|"Secure JOIN via xxhash64"| PIITable
@@ -61,17 +65,26 @@ flowchart TD
 
 ---
 
-## 🛡️ Production Hardening Features
+## 🛡️ Enterprise Hardening & Governance Features
 
-1. **Zero Data Loss via Dead-Letter Queue (DLQ)**:
-   - Malformed records with null or empty primary keys are segregated to `<target_table>_dlq` with `_dlq_reason` and `_dlq_timestamp`.
-   - The primary Gold table remains clean, while bad records are preserved for audit and recovery.
-2. **Raw Payload Preservation (`_rescued_payload`)**:
-   - The engine automatically captures the raw unmapped JSON in `_rescued_payload` so newly added upstream fields are never lost during schema drift.
-3. **Centralized Operational Telemetry**:
-   - Every micro-batch logs exact execution time, rows read, rows inserted, rows updated, and DLQ counts into a queryable Delta audit table (`runtime.audit_table`).
-4. **Automated Semantic Catalog for Databricks Genie**:
-   - Synchronizes table/column `COMMENT`s and Unity Catalog `PRIMARY KEY / FOREIGN KEY NOT ENFORCED` constraints, providing conversational AI agents with accurate star-schema context.
+1. **Declarative Data Quality Expectations (Phase 2)**:
+   - Configure validation rules directly in YAML:
+     - `fail_batch`: Halts processing immediately on severe data violations (circuit breaker).
+     - `quarantine`: Diverts rows violating rules (e.g. invalid status codes) to DLQ while allowing valid rows through.
+     - `warn`: Logs alerts and records telemetry without dropping records.
+2. **Historical Backfill CLI (Phase 2)**:
+   - Reprocess historical date windows without corrupting streaming checkpoint offsets:
+     ```bash
+     lakehouse-engine backfill --config-path configs/examples/subscriptions.yml --start-date 2026-01-01 --end-date 2026-03-31
+     ```
+3. **Zero Data Loss via Dead-Letter Queue (DLQ) (Phase 1)**:
+   - Segregates bad records to `<target_table>_dlq` tagged with `_dlq_reason` and `_dlq_timestamp`.
+4. **Raw Payload Preservation (`_rescued_payload`) (Phase 1)**:
+   - Preserves unmapped incoming JSON keys in `_rescued_payload` to eliminate silent loss during schema drift.
+5. **Centralized Operational Telemetry (Phase 1)**:
+   - Automatically logs rows read, inserted, updated, and duration to a queryable Delta audit table.
+6. **Automated Semantic Catalog for Databricks Genie**:
+   - Compiles Unity Catalog `NOT ENFORCED` constraints and canonical metric formulas for conversational text-to-SQL.
 
 ---
 
@@ -84,6 +97,7 @@ flowchart TD
 │   └── examples/
 │       └── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
 ├── context/                       # In-depth architectural context for LLMs & Engineers
+│   ├── phase2_governance_guide.md # Data quality expectations & backfill guide
 │   ├── phase1_hardening_guide.md  # DLQ and Operational Telemetry specifications
 │   ├── genie_kimball_modeling_guide.md
 │   ├── agentic_semantic_catalog.md
@@ -93,10 +107,12 @@ flowchart TD
 │   └── databricks_free_tier_guide.md
 ├── src/
 │   └── lakehouse_engine/
-│       ├── cli.py                 # Databricks workflow entry point CLI & export-genie
+│       ├── cli.py                 # CLI commands: run, backfill, export-genie
 │       ├── models/
 │       │   └── config.py          # Pydantic schema validation for configs
 │       └── core/
+│           ├── backfill.py        # Historical batch re-computation engine
+│           ├── expectations.py    # Data quality evaluation & circuit breakers
 │           ├── audit.py           # Centralized operational telemetry logger
 │           ├── dlq.py             # Pre-MERGE validation & DLQ quarantine
 │           ├── genie.py           # Genie instructions & constraint DDL compiler
@@ -114,7 +130,8 @@ flowchart TD
 ├── tests/
 │   ├── conftest.py                # Local PySpark session fixture
 │   ├── test_config.py             # Pydantic YAML schema validation tests
-│   └── test_phase1_dlq_audit.py   # DLQ & Telemetry test assertions
+│   ├── test_phase1_dlq_audit.py   # DLQ & Telemetry test assertions
+│   └── test_phase2_expectations_backfill.py # Expectations test assertions
 ├── CLAUDE.md                      # AI agent coding guidelines & rules
 ├── pyproject.toml                 # Modern PEP 621 Python packaging
 ├── Taskfile.yml                   # Unified developer automation commands
@@ -147,44 +164,32 @@ gold:
   catalog: "saas_dw"
   schema: "subscription_analytics"
   table: "dim_subscriptions"
-  table_comment: "Curated SaaS subscription dimension. Non-PII analytics safe."
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
   prune_column: "started_at"
   
-  # Phase 1 Hardening
+  # Phase 1: DLQ & Rescued Data
   enable_dlq: true
   dlq_table: "saas_dw.subscription_analytics.dim_subscriptions_dlq"
   track_rescued_data: true
+
+  # Phase 2: Data Quality Rules
+  expectations:
+    - name: "valid_mrr"
+      expr: "mrr_amount >= 0.0"
+      action: "fail_batch"
+    - name: "valid_status"
+      expr: "status IN ('ACTIVE', 'PAST_DUE', 'CANCELLED', 'PAUSED')"
+      action: "quarantine"
 
   fields:
     - name: "subscription_id"
       type: "string"
       expr: "payload.subscriptionId"
-      description: "Unique natural primary identifier."
       is_primary_key: true
-    - name: "plan_tier"
-      type: "string"
-      expr: "payload.plan.tier"
-      description: "Product tier."
     - name: "mrr_amount"
       type: "double"
       expr: "cast(payload.plan.amountCents as double) / 100.0"
-      description: "Monthly Recurring Revenue normalized to USD."
-
-pii_splits:
-  - name: "subscriber_profiles"
-    target_catalog: "saas_dw"
-    target_schema: "subscription_analytics_pii"
-    target_table: "dim_subscriber_profiles"
-    unique_keys: ["subscriber_account_id"]
-    foreign_key_expr: "xxhash64(cast(payload.subscriberId as string))"
-    foreign_key_name: "subscriber_account_id"
-    fields:
-      - name: "subscriber_email"
-        type: "string"
-        expr: "payload.subscriber.email"
-        mask_policy: "mask_email"
 ```
 
 ### Step 2: Validate Locally
@@ -192,15 +197,13 @@ pii_splits:
 task test
 ```
 
-### Step 3: Export Genie Space Instructions (Optional)
+### Step 3: Run Streaming or Historical Backfill
 ```bash
-task genie:export
-```
+# Streaming Run
+python3 -m lakehouse_engine.cli run --config-path configs/examples/subscriptions.yml
 
-### Step 4: Deploy via Terraform
-```bash
-task tf:plan ENV=dev
-task tf:apply ENV=dev
+# Historical Backfill (e.g. Q1 2026)
+python3 -m lakehouse_engine.cli backfill --config-path configs/examples/subscriptions.yml --start-date 2026-01-01 --end-date 2026-03-31
 ```
 
 ---
@@ -215,6 +218,7 @@ task tf:apply ENV=dev
 | `task format` | Formats code with `ruff` |
 | `task build` | Builds the lightweight `.whl` package to `dist/` |
 | `task genie:export` | Compiles Genie Space instructions & UC constraint DDLs |
+| `task backfill CONFIG=...` | Runs historical batch backfill |
 | `task tf:plan ENV=dev` | Runs `terraform plan` against specified environment |
 | `task tf:apply ENV=prod` | Deploys Terraform resources to specified environment |
 
