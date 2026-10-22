@@ -1,0 +1,5 @@
+databricks_host = "https://adb-9876543210987654.prod.azuredatabricks.net"
+environment     = "prod"
+catalog_name    = "prod_lakehouse"
+domain_name     = "ecommerce"
+wheel_file_path = "dbfs:/FileStore/wheels/lakehouse_engine-0.1.0-py3-none-any.whl"

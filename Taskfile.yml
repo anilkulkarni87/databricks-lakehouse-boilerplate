@@ -1,0 +1,52 @@
+version: '3'
+
+tasks:
+  install:
+    desc: Install Python dependencies
+    cmds:
+      - pip install -e ".[dev]"
+
+  lint:
+    desc: Run linting and static analysis
+    cmds:
+      - ruff check src/ tests/
+      - mypy src/
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - ruff format src/ tests/
+
+  test:
+    desc: Run unit tests with pytest
+    cmds:
+      - pytest tests/ -v
+
+  build:
+    desc: Build Python wheel artifact for Databricks deployment
+    cmds:
+      - python -m pip install build
+      - python -m build --wheel
+      - ls -lh dist/
+
+  tf:init:
+    desc: Initialize Terraform
+    dir: terraform
+    cmds:
+      - terraform init
+
+  tf:plan:
+    desc: Terraform plan (Usage: task tf:plan ENV=dev)
+    dir: terraform
+    vars:
+      ENV: '{{.ENV | default "dev"}}'
+    cmds:
+      - terraform plan -var-file="env_conf/{{.ENV}}.tfvars"
+
+  tf:apply:
+    desc: Terraform apply (Usage: task tf:apply ENV=dev)
+    dir: terraform
+    vars:
+      ENV: '{{.ENV | default "dev"}}'
+    cmds:
+      - terraform apply -var-file="env_conf/{{.ENV}}.tfvars"

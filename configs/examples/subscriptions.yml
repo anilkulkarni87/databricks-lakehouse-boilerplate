@@ -1,0 +1,98 @@
+version: "1.0"
+entity_name: "subscriptions"
+description: "SaaS subscription lifecycle events with automated billing contact PII separation"
+
+source:
+  catalog: "raw_landing"
+  schema: "event_stream"
+  table: "silver_subscription_events"
+  stream_filter_field: null
+
+runtime:
+  trigger_type: "AvailableNow"
+  max_mbytes_per_trigger: 2000
+  checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/subscriptions"
+
+# Non-PII Gold Curated Table
+gold:
+  catalog: "saas_dw"
+  schema: "subscription_analytics"
+  table: "dim_subscriptions"
+  unique_keys: ["subscription_id"]
+  cluster_by: ["started_at"]
+  prune_column: "started_at"
+  schema_evolution: "mergeSchema"
+  fields:
+    - name: "subscription_id"
+      type: "string"
+      expr: "payload.subscriptionId"
+    - name: "plan_tier"
+      type: "string"
+      expr: "payload.plan.tier"
+    - name: "billing_interval"
+      type: "string"
+      expr: "payload.plan.billingInterval"
+    - name: "mrr_amount"
+      type: "double"
+      expr: "cast(payload.plan.amountCents as double) / 100.0"
+    - name: "currency"
+      type: "string"
+      expr: "payload.currency"
+    - name: "status"
+      type: "string"
+      expr: "payload.status"
+    - name: "is_trial"
+      type: "boolean"
+      expr: "cast(payload.isTrial as boolean)"
+    - name: "auto_renew"
+      type: "boolean"
+      expr: "cast(payload.autoRenew as boolean)"
+    - name: "renewal_count"
+      type: "int"
+      expr: "cast(payload.renewalCount as int)"
+    - name: "started_at"
+      type: "timestamp"
+      expr: "cast(payload.startedOn as timestamp)"
+    - name: "updated_at"
+      type: "timestamp"
+      expr: "cast(payload.updatedOn as timestamp)"
+    - name: "subscriber_account_id"
+      type: "string"
+      expr: "xxhash64(cast(payload.subscriberId as string))" # Synthetic FK to PII table
+
+# Automated PII Isolation: Route sensitive subscriber contact details to secure PII schema
+pii_splits:
+  - name: "subscriber_profiles"
+    target_catalog: "saas_dw"
+    target_schema: "subscription_analytics_pii"
+    target_table: "dim_subscriber_profiles"
+    unique_keys: ["subscriber_account_id"]
+    foreign_key_expr: "xxhash64(cast(payload.subscriberId as string))"
+    foreign_key_name: "subscriber_account_id"
+    cluster_by: ["created_at"]
+    fields:
+      - name: "original_subscriber_id"
+        type: "string"
+        expr: "payload.subscriberId"
+      - name: "subscriber_email"
+        type: "string"
+        expr: "payload.subscriber.email"
+        mask_policy: "mask_email"
+      - name: "billing_contact_name"
+        type: "string"
+        expr: "payload.subscriber.contactName"
+      - name: "billing_phone"
+        type: "string"
+        expr: "payload.subscriber.phone"
+      - name: "company_tax_id"
+        type: "string"
+        expr: "payload.subscriber.taxIdentifier"
+      - name: "billing_country"
+        type: "string"
+        expr: "payload.subscriber.country"
+      - name: "billing_postal_code"
+        type: "string"
+        expr: "payload.subscriber.postalCode"
+      - name: "created_at"
+        type: "timestamp"
+        expr: "cast(payload.startedOn as timestamp)"

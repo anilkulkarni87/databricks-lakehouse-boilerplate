@@ -1,0 +1,68 @@
+# ==============================================================================
+# Entity Extraction & Lakehouse Ingestion Configuration Template
+# ==============================================================================
+version: "1.0"
+entity_name: "example_entity"
+description: "Template definition for ingesting an entity with automated PII segregation"
+
+# Source Table Configuration (Silver layer or raw stream)
+source:
+  catalog: "raw_catalog"
+  schema: "ingestion_stream"
+  table: "silver_stream_payloads"
+  stream_filter_field: "stream_name"
+  stream_filter_value: "example_entity"
+
+# Runtime Streaming Parameters
+runtime:
+  trigger_type: "AvailableNow" # AvailableNow for batch-like cost, ProcessingTime for 24/7 streaming
+  max_mbytes_per_trigger: 2048 # Throttles batch size to prevent disk spill / memory pressure
+  checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/example_entity"
+
+# Non-PII Gold Destination Table
+gold:
+  catalog: "enterprise_dw"
+  schema: "domain"
+  table: "example_entities"
+  unique_keys: ["id"]
+  cluster_by: ["created_at"]       # Databricks Liquid Clustering
+  prune_column: "created_at"       # Prunes MERGE table scans to changed dates
+  schema_evolution: "mergeSchema"  # Auto-evolves Delta table when new columns are declared
+  fields:
+    - name: "id"
+      type: "bigint"
+      expr: "cast(payload.id as bigint)"
+    - name: "reference_code"
+      type: "string"
+      expr: "payload.ref"
+    - name: "status"
+      type: "string"
+      expr: "payload.status"
+    - name: "created_at"
+      type: "timestamp"
+      expr: "cast(payload.createdOn as timestamp)"
+    - name: "updated_at"
+      type: "timestamp"
+      expr: "cast(payload.updatedOn as timestamp)"
+
+# Optional: Automated PII Splits (routed to secure _pii schema / catalog)
+pii_splits:
+  - name: "pii_profile"
+    target_catalog: "enterprise_dw"
+    target_schema: "domain_pii"
+    target_table: "example_entity_pii"
+    unique_keys: ["entity_id"]
+    foreign_key_expr: "cast(payload.id as bigint)"
+    foreign_key_name: "entity_id"
+    cluster_by: ["created_at"]
+    fields:
+      - name: "email"
+        type: "string"
+        expr: "payload.customerProfile.email"
+        mask_policy: "mask_email" # Unity Catalog Column Mask UDF
+      - name: "phone_number"
+        type: "string"
+        expr: "payload.customerProfile.phone"
+      - name: "full_name"
+        type: "string"
+        expr: "payload.customerProfile.name"
