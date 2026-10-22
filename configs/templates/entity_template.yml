@@ -18,6 +18,7 @@ runtime:
   trigger_type: "AvailableNow" # AvailableNow for batch-like cost, ProcessingTime for 24/7 streaming
   max_mbytes_per_trigger: 2048 # Throttles batch size to prevent disk spill / memory pressure
   checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/example_entity"
+  audit_table: "enterprise_dw.operational_telemetry.batch_audit_log" # Centralized telemetry
 
 # Non-PII Gold Destination Table
 gold:
@@ -25,15 +26,23 @@ gold:
   schema: "domain"
   table: "example_entities"
   table_comment: "Curated domain entity table. Non-PII analytics safe."
+  table_type: "dimension"
   unique_keys: ["id"]
   cluster_by: ["created_at"]       # Databricks Liquid Clustering
   prune_column: "created_at"       # Prunes MERGE table scans to changed dates
   schema_evolution: "mergeSchema"  # Auto-evolves Delta table when new columns are declared
+  
+  # Phase 1: Dead-Letter Queue & Rescued Data
+  enable_dlq: true
+  dlq_table: "enterprise_dw.domain.example_entities_dlq"
+  track_rescued_data: true
+
   fields:
     - name: "id"
       type: "bigint"
       expr: "cast(payload.id as bigint)"
       description: "Primary key identifier."
+      is_primary_key: true
     - name: "reference_code"
       type: "string"
       expr: "payload.ref"

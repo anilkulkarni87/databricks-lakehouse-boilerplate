@@ -13,6 +13,8 @@ runtime:
   trigger_type: "AvailableNow"
   max_mbytes_per_trigger: 2000
   checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/subscriptions"
+  # Phase 1: Centralized Operational Telemetry Audit Table
+  audit_table: "saas_dw.operational_telemetry.batch_audit_log"
 
 # Non-PII Gold Curated Table
 gold:
@@ -25,6 +27,11 @@ gold:
   cluster_by: ["started_at"]
   prune_column: "started_at"
   schema_evolution: "mergeSchema"
+
+  # Phase 1: Dead-Letter Queue & Rescued Data
+  enable_dlq: true
+  dlq_table: "saas_dw.subscription_analytics.dim_subscriptions_dlq"
+  track_rescued_data: true
 
   # Kimball Dimensional Modeling & Genie Semantic Relationships
   foreign_keys:

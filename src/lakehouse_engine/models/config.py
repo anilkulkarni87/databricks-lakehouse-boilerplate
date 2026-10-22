@@ -36,6 +36,7 @@ class RuntimeConfig(BaseModel):
     trigger_type: str = "AvailableNow"
     max_mbytes_per_trigger: int = 2000
     checkpoint_location: str
+    audit_table: Optional[str] = Field(None, description="Centralized operational telemetry audit table FQDN")
 
 class TargetTableConfig(BaseModel):
     catalog: str
@@ -51,9 +52,18 @@ class TargetTableConfig(BaseModel):
     foreign_keys: List[ForeignKeyReference] = []
     metrics: List[MetricDefinition] = []
 
+    # Phase 1 Production Hardening: DLQ & Rescued Data
+    enable_dlq: bool = Field(True, description="Enable automated Dead-Letter Queue quarantine for malformed records")
+    dlq_table: Optional[str] = Field(None, description="Custom DLQ table FQDN. Defaults to <target_table>_dlq")
+    track_rescued_data: bool = Field(True, description="Preserves raw unmapped payload in _rescued_payload to prevent silent loss")
+
     @property
     def fqdn(self) -> str:
         return f"{self.catalog}.{self.schema_name}.{self.table}" if self.catalog else f"{self.schema_name}.{self.table}"
+
+    @property
+    def dlq_fqdn(self) -> str:
+        return self.dlq_table or f"{self.fqdn}_dlq"
 
 class PiiSplitConfig(BaseModel):
     name: str
