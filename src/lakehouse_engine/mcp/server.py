@@ -65,7 +65,31 @@ TOOLS_METADATA = [
                 "sample_json": {"type": "string", "description": "Sample JSON string payload"}
             }
         }
-    }
+    },
+    {
+        "name": "triage_dlq",
+        "description": "Autonomous Dead-Letter Queue (DLQ) Triage: Analyzes quarantined records, discovers schema drift & expectation violations, and derives automated self-healing YAML patches.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "config_path": {
+                    "type": "string",
+                    "description": "Path to entity YAML configuration file"
+                },
+                "dlq_records": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Optional sample of quarantined records (with _dlq_reason and _rescued_payload)"
+                },
+                "apply_fix": {
+                    "type": "boolean",
+                    "description": "Whether to apply recommended patches directly to YAML",
+                    "default": False
+                }
+            },
+            "required": ["config_path"]
+        }
+    },
 ]
 
 def handle_validate(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -244,6 +268,35 @@ def handle_generate_scaffold(args: Dict[str, Any]) -> Dict[str, Any]:
     yaml_str = yaml.dump(scaffold, sort_keys=False)
     return {"content": [{"type": "text", "text": yaml_str}]}
 
+def handle_triage_dlq(args: Dict[str, Any]) -> Dict[str, Any]:
+    from lakehouse_engine.core.triage import analyze_quarantined_records, apply_triage_patches_to_yaml
+
+    config_path = args.get("config_path")
+    if not config_path:
+        return {"isError": True, "content": [{"type": "text", "text": "Missing 'config_path'"}]}
+
+    p = Path(config_path)
+    if not p.is_absolute():
+        p = Path(__file__).parents[3] / p
+    if not p.exists():
+        return {"isError": True, "content": [{"type": "text", "text": f"Config not found: {p}"}]}
+
+    data = yaml.safe_load(p.read_text())
+    config = EntityPipelineConfig.model_validate(data)
+    records = args.get("dlq_records", [])
+
+    report = analyze_quarantined_records(config, records)
+    res_text = report.format_console_report()
+
+    if args.get("apply_fix", False):
+        success, diff = apply_triage_patches_to_yaml(str(p), report)
+        if success:
+            res_text += f"\n\n✨ Applied self-healing patch:\n{diff}"
+        else:
+            res_text += f"\n\n[Notice] {diff}"
+
+    return {"content": [{"type": "text", "text": res_text}]}
+
 def run_mcp_server():
     """
     Standard Model Context Protocol (MCP) server listening on stdin / stdout via JSON-RPC 2.0.
@@ -306,6 +359,8 @@ def run_mcp_server():
                 out = handle_export_genie(tool_args)
             elif tool_name == "generate_entity_scaffold":
                 out = handle_generate_scaffold(tool_args)
+            elif tool_name == "triage_dlq":
+                out = handle_triage_dlq(tool_args)
             else:
                 out = {"isError": True, "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}]}
 

@@ -65,3 +65,8 @@ tasks:
     desc: Start Model Context Protocol (MCP) server for AI coding and data modeling agents
     cmds:
       - python3 -m lakehouse_engine.cli mcp-serve
+
+  dlq:triage:
+    desc: "Autonomous DLQ Triage: Diagnose quarantined records and suggest self-healing patches (Usage: task dlq:triage CONFIG=configs/examples/subscriptions.yml [SAMPLE=configs/examples/sample_dlq_records.json])"
+    cmds:
+      - python3 -m lakehouse_engine.cli triage-dlq --config-path {{.CONFIG | default "configs/examples/subscriptions.yml"}} {{if .SAMPLE}}--sample-file {{.SAMPLE}}{{end}}

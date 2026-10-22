@@ -99,6 +99,54 @@ def export_genie(configs_dir: str, output_file: str):
     print(f"Successfully generated Databricks Genie Space instructions: {out_path.resolve()}")
 
 
+
+@cli.command("triage-dlq")
+@click.option("--config-path", "-c", required=True, help="Path to YAML entity configuration file")
+@click.option("--sample-file", "-s", default=None, help="Optional path to JSON file with sample DLQ records (for local/offline mode)")
+@click.option("--apply-fix", is_flag=True, default=False, help="Automatically apply recommended remediation patches to the YAML config")
+@click.option("--limit", "-l", default=500, help="Maximum number of DLQ records to inspect")
+def triage_dlq(config_path: str, sample_file: str, apply_fix: bool, limit: int):
+    """
+    Autonomous DLQ Triage: Analyzes quarantined records, discovers schema drift & expectation violations,
+    and derives automated self-healing YAML patches.
+    """
+    import json
+    from lakehouse_engine.core.triage import analyze_quarantined_records, apply_triage_patches_to_yaml
+
+    with open(config_path, "r") as f:
+        raw_config = yaml.safe_load(f)
+
+    config = EntityPipelineConfig.model_validate(raw_config)
+
+    records = []
+    if sample_file:
+        with open(sample_file, "r") as sf:
+            raw_sample = json.load(sf)
+            records = raw_sample if isinstance(raw_sample, list) else [raw_sample]
+    else:
+        try:
+            from pyspark.sql import SparkSession
+            spark = SparkSession.getActiveSession()
+            if spark and spark.catalog.tableExists(config.gold.dlq_fqdn):
+                df = spark.table(config.gold.dlq_fqdn).limit(limit)
+                records = [row.asDict(recursive=True) for row in df.collect()]
+            else:
+                print(f"[WARN] No active Spark session or table {config.gold.dlq_fqdn} not found. Running triage in zero-record diagnostic mode.")
+        except ImportError:
+            print("[WARN] PySpark not available and --sample-file not provided. Running in zero-record diagnostic mode.")
+
+    report = analyze_quarantined_records(config, records)
+    print(report.format_console_report())
+
+    if apply_fix:
+        success, diff = apply_triage_patches_to_yaml(config_path, report)
+        if success:
+            print("\n✨ Successfully applied autonomous self-healing fix to YAML config!")
+            print("Diff preview:")
+            print(diff)
+        else:
+            print(f"\n[Notice] {diff}")
+
 @cli.command("mcp-serve")
 def mcp_serve():
     """

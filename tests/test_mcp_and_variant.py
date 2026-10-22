@@ -26,6 +26,7 @@ class TestMCPAndVariant(unittest.TestCase):
         self.assertIn("list_entities", tool_names)
         self.assertIn("export_genie_instructions", tool_names)
         self.assertIn("generate_entity_scaffold", tool_names)
+        self.assertIn("triage_dlq", tool_names)
 
     def test_mcp_validate_pipeline_config(self):
         config_path = str(Path(__file__).parents[1] / "configs" / "examples" / "subscriptions.yml")
@@ -69,6 +70,17 @@ class TestMCPAndVariant(unittest.TestCase):
         self.assertTrue(config.gold.enable_dlq)
         self.assertEqual(len(config.pii_splits), 1)
         self.assertEqual(config.pii_splits[0].fields[0].name, "customer_email")
+
+    def test_mcp_triage_dlq(self):
+        from lakehouse_engine.mcp.server import handle_triage_dlq
+        config_path = str(Path(__file__).parents[1] / "configs" / "examples" / "subscriptions.yml")
+        sample_dlq = [{
+            "_dlq_reason": "MISSING_OR_EMPTY_KEY:subscription_id",
+            "_rescued_payload": {"sub_id": "sub_101"}
+        }]
+        res = handle_triage_dlq({"config_path": config_path, "dlq_records": sample_dlq})
+        self.assertFalse(res.get("isError", False))
+        self.assertIn("AUTONOMOUS DLQ TRIAGE", res["content"][0]["text"])
 
 if __name__ == "__main__":
     unittest.main()

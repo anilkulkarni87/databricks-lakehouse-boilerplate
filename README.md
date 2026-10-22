@@ -95,8 +95,10 @@ flowchart TD
 │   ├── templates/
 │   │   └── entity_template.yml    # Scaffolding template for new entities
 │   └── examples/
-│       └── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
+│       ├── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
+│       └── sample_dlq_records.json# Realistic quarantined records for offline triage testing
 ├── context/                       # In-depth architectural context for LLMs & Engineers
+│   ├── autonomous_dlq_triage_guide.md # Autonomous self-healing DLQ triage engine
 │   ├── dlq_and_telemetry_guide.md # Zero-loss DLQ quarantine and audit log schema
 │   ├── data_quality_and_backfill_guide.md # Data quality expectations & backfill guide
 │   ├── databricks_variant_guide.md# Native Databricks binary VARIANT guide
@@ -115,6 +117,7 @@ flowchart TD
 │       ├── models/
 │       │   └── config.py          # Pydantic schema validation for configs
 │       └── core/
+│           ├── triage.py          # Autonomous DLQ triage & self-healing patch engine
 │           ├── backfill.py        # Historical batch re-computation engine
 │           ├── expectations.py    # Data quality evaluation & circuit breakers
 │           ├── audit.py           # Centralized operational telemetry logger
@@ -135,6 +138,7 @@ flowchart TD
 │   ├── conftest.py                # Local PySpark session fixture
 │   ├── test_config.py             # Pydantic YAML schema validation tests
 │   ├── test_dlq_audit.py          # DLQ quarantine & telemetry test assertions
+│   ├── test_dlq_triage.py         # Autonomous DLQ triage & self-healing test assertions
 │   ├── test_expectations_backfill.py # Expectations & historical backfill assertions
 │   └── test_mcp_and_variant.py    # VARIANT parsing & MCP server assertions
 ├── .mcp.json                      # MCP client config for Cursor, Claude & AI tools
