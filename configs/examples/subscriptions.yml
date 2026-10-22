@@ -1,6 +1,7 @@
 version: "1.0"
 entity_name: "subscriptions"
 description: "SaaS subscription lifecycle events with automated billing contact PII separation"
+business_domain: "Subscriptions & Revenue"
 
 source:
   catalog: "raw_landing"
@@ -19,15 +20,40 @@ gold:
   schema: "subscription_analytics"
   table: "dim_subscriptions"
   table_comment: "Curated SaaS subscription dimension. Grain: one row per active/historical subscription entity. Non-PII analytics safe."
+  table_type: "dimension"
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
   prune_column: "started_at"
   schema_evolution: "mergeSchema"
+
+  # Kimball Dimensional Modeling & Genie Semantic Relationships
+  foreign_keys:
+    - column: "subscriber_account_id"
+      referenced_table: "saas_dw.subscription_analytics_pii.dim_subscriber_profiles"
+      referenced_column: "subscriber_account_id"
+      relationship_description: "Joins to customer PII outrigger profile table for authorized identity lookups."
+
+  # Official Business Metrics for Genie Text-to-SQL
+  metrics:
+    - name: "Total MRR"
+      sql_formula: "SUM(CASE WHEN status = 'ACTIVE' THEN mrr_amount ELSE 0 END)"
+      description: "Total Monthly Recurring Revenue from active paying subscriptions in USD."
+      synonyms: ["MRR", "Monthly Revenue", "Recurring Revenue"]
+    - name: "Active Subscription Count"
+      sql_formula: "COUNT(DISTINCT CASE WHEN status = 'ACTIVE' THEN subscription_id END)"
+      description: "Count of unique currently active subscriptions."
+      synonyms: ["Active Subs", "Paying Customers", "Subscriber Count"]
+    - name: "Active Trial Count"
+      sql_formula: "COUNT(DISTINCT CASE WHEN is_trial = true AND status = 'ACTIVE' THEN subscription_id END)"
+      description: "Count of customers currently evaluating the product in a free trial."
+      synonyms: ["Free Trials", "Trial Users"]
+
   fields:
     - name: "subscription_id"
       type: "string"
       expr: "payload.subscriptionId"
       description: "Unique natural primary identifier for the subscription contract."
+      is_primary_key: true
     - name: "plan_tier"
       type: "string"
       expr: "payload.plan.tier"
@@ -73,13 +99,13 @@ gold:
       expr: "xxhash64(cast(payload.subscriberId as string))"
       description: "Deterministic 64-bit hash key linking to dim_subscriber_profiles in the secure PII schema."
 
-# Automated PII Isolation: Route sensitive subscriber contact details to secure PII schema
+# Automated PII Isolation
 pii_splits:
   - name: "subscriber_profiles"
     target_catalog: "saas_dw"
     target_schema: "subscription_analytics_pii"
     target_table: "dim_subscriber_profiles"
-    table_comment: "Restricted subscriber identity and PII profile dimension. Requires compliance / elevated access group membership."
+    table_comment: "Restricted subscriber identity and PII profile dimension."
     unique_keys: ["subscriber_account_id"]
     foreign_key_expr: "xxhash64(cast(payload.subscriberId as string))"
     foreign_key_name: "subscriber_account_id"

@@ -50,3 +50,8 @@ tasks:
       ENV: '{{.ENV | default "dev"}}'
     cmds:
       - terraform apply -var-file="env_conf/{{.ENV}}.tfvars"
+
+  genie:export:
+    desc: Export Databricks Genie Space instructions and Unity Catalog constraint DDLs
+    cmds:
+      - python3 -m lakehouse_engine.cli export-genie --configs-dir configs/examples --output-file genie_space_instructions.md

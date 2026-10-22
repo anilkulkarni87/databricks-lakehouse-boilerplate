@@ -5,8 +5,21 @@ class FieldDefinition(BaseModel):
     name: str = Field(..., description="Target column name")
     type: str = Field(..., description="Spark SQL data type")
     expr: str = Field(..., description="SQL transformation expression")
-    description: Optional[str] = Field(None, description="Semantic description for Unity Catalog / Agent text-to-SQL")
+    description: Optional[str] = Field(None, description="Semantic description for Unity Catalog / Genie Text-to-SQL")
+    is_primary_key: bool = Field(False, description="Whether this column is part of the primary key")
     mask_policy: Optional[str] = Field(None, description="Unity Catalog Column Mask UDF name")
+
+class ForeignKeyReference(BaseModel):
+    column: str = Field(..., description="Foreign key column name in this table")
+    referenced_table: str = Field(..., description="Target dimension table (catalog.schema.table)")
+    referenced_column: str = Field(..., description="Target primary key column in dimension table")
+    relationship_description: Optional[str] = Field(None, description="Explains relationship for Genie text-to-SQL")
+
+class MetricDefinition(BaseModel):
+    name: str = Field(..., description="Business metric name (e.g., Total MRR)")
+    sql_formula: str = Field(..., description="SQL aggregation expression (e.g., SUM(mrr_amount))")
+    description: str = Field(..., description="Business definition and guidance for Genie queries")
+    synonyms: List[str] = Field(default_factory=list, description="Common alternative names used in natural language")
 
 class SourceConfig(BaseModel):
     catalog: str
@@ -28,12 +41,15 @@ class TargetTableConfig(BaseModel):
     catalog: str
     schema_name: str = Field(..., alias="schema")
     table: str
-    table_comment: Optional[str] = Field(None, description="Semantic description of the table for catalog & AI agents")
+    table_comment: Optional[str] = Field(None, description="Semantic description of the table for catalog & Genie")
+    table_type: str = Field("dimension", description="'fact' or 'dimension' for Kimball modeling")
     unique_keys: List[str]
     cluster_by: List[str] = []
     prune_column: Optional[str] = None
     schema_evolution: str = "mergeSchema"
     fields: List[FieldDefinition]
+    foreign_keys: List[ForeignKeyReference] = []
+    metrics: List[MetricDefinition] = []
 
     @property
     def fqdn(self) -> str:
@@ -59,6 +75,7 @@ class EntityPipelineConfig(BaseModel):
     version: str = "1.0"
     entity_name: str
     description: Optional[str] = None
+    business_domain: Optional[str] = Field(None, description="Domain classification (e.g. Finance, Subscriptions, Sales)")
     source: SourceConfig
     runtime: RuntimeConfig
     gold: TargetTableConfig

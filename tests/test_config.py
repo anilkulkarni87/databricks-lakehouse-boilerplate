@@ -20,6 +20,13 @@ def test_subscriptions_config_validates():
     assert mrr_field.description is not None
     assert "Monthly Recurring Revenue" in mrr_field.description
 
+    # Verify Kimball & Genie Extensions
+    assert len(config.gold.foreign_keys) == 1
+    assert config.gold.foreign_keys[0].column == "subscriber_account_id"
+    assert len(config.gold.metrics) == 3
+    assert config.gold.metrics[0].name == "Total MRR"
+    assert "status = 'ACTIVE'" in config.gold.metrics[0].sql_formula
+
     assert len(config.pii_splits) == 1
     assert config.pii_splits[0].fqdn == "saas_dw.subscription_analytics_pii.dim_subscriber_profiles"
     assert config.pii_splits[0].table_comment is not None

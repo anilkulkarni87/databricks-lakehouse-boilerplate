@@ -14,6 +14,7 @@ task test               # Run pytest suite across tests/
 task lint               # Run ruff check and mypy type checking
 task format             # Auto-format with ruff
 task build              # Package wheel into dist/ for Databricks deployment
+task genie:export       # Export Databricks Genie Space instructions & UC constraints
 task tf:plan ENV=dev    # Terraform plan against target environment
 task tf:apply ENV=dev   # Terraform apply against target environment
 ```
@@ -29,11 +30,15 @@ task tf:apply ENV=dev   # Terraform apply against target environment
    - **Silver**: Source table storing payload data + ingestion tracking columns (`_ingested_at`, `stream_name`).
    - **Gold**: Curated, schema-typed, non-PII dimension/fact tables (`gold` block in YAML).
    - **PII Layer**: Sensitive attributes are extracted into separate tables in a restricted `_pii` schema (`pii_splits` block in YAML).
-3. **Delta Lake Best Practices**:
+3. **Databricks Genie & Kimball Dimensional Modeling**:
+   - Declare primary keys (`is_primary_key: true`) and foreign key relationships (`foreign_keys`).
+   - Define canonical business KPI formulas (`metrics`) with synonyms so Genie generates consistent SQL.
+   - Run `task genie:export` to generate Unity Catalog informational constraint DDLs (`NOT ENFORCED`) and Genie Space Room instructions.
+4. **Delta Lake Best Practices**:
    - **Liquid Clustering**: Tables must specify `.clusterBy(...)` using business event timestamps (`created_at`, `started_at`). Never use legacy directory partitions.
    - **In-Batch Deduplication**: Always deduplicate inside micro-batches before executing a MERGE to avoid duplicate-key merge failures.
    - **Pruned Idempotent MERGE**: MERGE join conditions must include a partition/date filter (`to_date(target.col) IN (...)`) derived from the incoming batch to prevent full-table scans.
-4. **Zero-Blast Radius**:
+5. **Zero-Blast Radius**:
    - Adding a new entity or extending fields should only touch `configs/<entity>.yml`.
    - Never rebuild binaries or re-deploy existing jobs for simple schema extensions.
 
@@ -42,7 +47,10 @@ task tf:apply ENV=dev   # Terraform apply against target environment
 ## 📁 Repository Reference Map
 
 - `configs/templates/entity_template.yml`: Reference schema for all YAML configurations.
+- `context/genie_kimball_modeling_guide.md`: Step-by-step Kimball modeling guide for Databricks Genie.
+- `context/agentic_semantic_catalog.md`: Automatic Unity Catalog comments for text-to-SQL agents.
 - `src/lakehouse_engine/models/config.py`: Pydantic data model validating YAML configs.
+- `src/lakehouse_engine/core/genie.py`: Generator for Genie Space instructions & UC constraints.
 - `src/lakehouse_engine/core/delta_ops.py`: Delta MERGE, deduplication, and Liquid Clustering logic.
 - `src/lakehouse_engine/core/pii.py`: PII field extraction, hash generation (`xxhash64`), and isolation.
 - `src/lakehouse_engine/core/streaming.py`: Spark Structured Streaming coordinator (`Trigger.AvailableNow`).
