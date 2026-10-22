@@ -33,6 +33,8 @@ class SourceConfig(BaseModel):
     table: str
     stream_filter_field: Optional[str] = None
     stream_filter_value: Optional[str] = None
+    payload_column: str = Field("payload", description="Name of the semi-structured payload column in source")
+    payload_type: str = Field("variant", description="Encoding: 'variant' (Databricks native binary VARIANT), 'json_string', or 'struct'")
 
     @property
     def fqdn(self) -> str:
@@ -62,6 +64,7 @@ class TargetTableConfig(BaseModel):
     enable_dlq: bool = Field(True, description="Enable automated Dead-Letter Queue quarantine for malformed records")
     dlq_table: Optional[str] = Field(None, description="Custom DLQ table FQDN. Defaults to <target_table>_dlq")
     track_rescued_data: bool = Field(True, description="Preserves raw unmapped payload in _rescued_payload")
+    store_rescued_as_variant: bool = Field(True, description="Stores _rescued_payload as Databricks native VARIANT")
 
     # Phase 2: Data Quality Expectations
     expectations: List[ExpectationConfig] = Field(default_factory=list, description="Declarative data quality rules")

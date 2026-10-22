@@ -41,7 +41,7 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
 
         try:
             # 1. Transform Gold non-PII dataset
-            transformed_gold_df = transform_entity(batch_df, config.gold)
+            transformed_gold_df = transform_entity(batch_df, config.gold, config.source.payload_column, config.source.payload_type)
 
             # 2. Phase 1 Hardening: DLQ Split (primary key validation)
             valid_gold_df, pk_dlq_df = split_valid_and_dlq(transformed_gold_df, config.gold.unique_keys)

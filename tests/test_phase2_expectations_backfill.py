@@ -36,3 +36,12 @@ def test_template_phase2_expectations():
     assert len(config.gold.expectations) == 2
     assert config.gold.expectations[0].action == "fail_batch"
     assert config.gold.expectations[1].action == "quarantine"
+
+def test_variant_config():
+    config_path = Path(__file__).parents[1] / "configs" / "examples" / "subscriptions.yml"
+    with open(config_path) as f:
+        data = yaml.safe_load(f)
+
+    config = EntityPipelineConfig.model_validate(data)
+    assert config.source.payload_type == "variant"
+    assert config.gold.store_rescued_as_variant is True

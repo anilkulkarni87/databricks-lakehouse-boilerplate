@@ -59,7 +59,7 @@ def run_backfill(
         return
 
     # 3. Transform Gold Entity
-    transformed_gold_df = transform_entity(source_df, config.gold)
+    transformed_gold_df = transform_entity(source_df, config.gold, config.source.payload_column, config.source.payload_type)
 
     # 4. Primary Key DLQ Split
     valid_gold_df, pk_dlq_df = split_valid_and_dlq(transformed_gold_df, config.gold.unique_keys)
