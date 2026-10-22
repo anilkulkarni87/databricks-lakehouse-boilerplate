@@ -33,7 +33,14 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
         try:
             # Process Gold Non-PII Table
             gold_df = transform_entity(batch_df, config.gold)
-            ensure_delta_table(spark, config.gold.fqdn, gold_df, config.gold.cluster_by)
+            ensure_delta_table(
+                spark=spark,
+                table_fqdn=config.gold.fqdn,
+                df=gold_df,
+                cluster_by=config.gold.cluster_by,
+                table_comment=config.gold.table_comment,
+                fields=config.gold.fields
+            )
             merge_batch_pruned(
                 spark=spark,
                 target_table_fqdn=config.gold.fqdn,
@@ -48,7 +55,14 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
             for pii_cfg in config.pii_splits:
                 pii_df = extract_pii_split(batch_df, pii_cfg)
                 if not pii_df.isEmpty():
-                    ensure_delta_table(spark, pii_cfg.fqdn, pii_df, pii_cfg.cluster_by)
+                    ensure_delta_table(
+                        spark=spark,
+                        table_fqdn=pii_cfg.fqdn,
+                        df=pii_df,
+                        cluster_by=pii_cfg.cluster_by,
+                        table_comment=pii_cfg.table_comment,
+                        fields=pii_cfg.fields
+                    )
                     merge_batch_pruned(
                         spark=spark,
                         target_table_fqdn=pii_cfg.fqdn,

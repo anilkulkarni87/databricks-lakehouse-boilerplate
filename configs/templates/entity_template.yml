@@ -24,6 +24,7 @@ gold:
   catalog: "enterprise_dw"
   schema: "domain"
   table: "example_entities"
+  table_comment: "Curated domain entity table. Non-PII analytics safe."
   unique_keys: ["id"]
   cluster_by: ["created_at"]       # Databricks Liquid Clustering
   prune_column: "created_at"       # Prunes MERGE table scans to changed dates
@@ -32,18 +33,23 @@ gold:
     - name: "id"
       type: "bigint"
       expr: "cast(payload.id as bigint)"
+      description: "Primary key identifier."
     - name: "reference_code"
       type: "string"
       expr: "payload.ref"
+      description: "Human-readable reference code."
     - name: "status"
       type: "string"
       expr: "payload.status"
+      description: "Current lifecycle state."
     - name: "created_at"
       type: "timestamp"
       expr: "cast(payload.createdOn as timestamp)"
+      description: "Record creation timestamp."
     - name: "updated_at"
       type: "timestamp"
       expr: "cast(payload.updatedOn as timestamp)"
+      description: "Most recent update timestamp."
 
 # Optional: Automated PII Splits (routed to secure _pii schema / catalog)
 pii_splits:
@@ -51,6 +57,7 @@ pii_splits:
     target_catalog: "enterprise_dw"
     target_schema: "domain_pii"
     target_table: "example_entity_pii"
+    table_comment: "Sensitive customer profile data. Requires PII access group permissions."
     unique_keys: ["entity_id"]
     foreign_key_expr: "cast(payload.id as bigint)"
     foreign_key_name: "entity_id"
@@ -59,10 +66,13 @@ pii_splits:
       - name: "email"
         type: "string"
         expr: "payload.customerProfile.email"
+        description: "Primary customer contact email."
         mask_policy: "mask_email" # Unity Catalog Column Mask UDF
       - name: "phone_number"
         type: "string"
         expr: "payload.customerProfile.phone"
+        description: "Customer telephone contact."
       - name: "full_name"
         type: "string"
         expr: "payload.customerProfile.name"
+        description: "Full personal legal name."

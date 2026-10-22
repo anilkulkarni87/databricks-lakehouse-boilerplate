@@ -5,6 +5,7 @@ class FieldDefinition(BaseModel):
     name: str = Field(..., description="Target column name")
     type: str = Field(..., description="Spark SQL data type")
     expr: str = Field(..., description="SQL transformation expression")
+    description: Optional[str] = Field(None, description="Semantic description for Unity Catalog / Agent text-to-SQL")
     mask_policy: Optional[str] = Field(None, description="Unity Catalog Column Mask UDF name")
 
 class SourceConfig(BaseModel):
@@ -16,7 +17,7 @@ class SourceConfig(BaseModel):
 
     @property
     def fqdn(self) -> str:
-        return f"{self.catalog}.{self.schema_name}.{self.table}"
+        return f"{self.catalog}.{self.schema_name}.{self.table}" if self.catalog else f"{self.schema_name}.{self.table}"
 
 class RuntimeConfig(BaseModel):
     trigger_type: str = "AvailableNow"
@@ -27,6 +28,7 @@ class TargetTableConfig(BaseModel):
     catalog: str
     schema_name: str = Field(..., alias="schema")
     table: str
+    table_comment: Optional[str] = Field(None, description="Semantic description of the table for catalog & AI agents")
     unique_keys: List[str]
     cluster_by: List[str] = []
     prune_column: Optional[str] = None
@@ -35,13 +37,14 @@ class TargetTableConfig(BaseModel):
 
     @property
     def fqdn(self) -> str:
-        return f"{self.catalog}.{self.schema_name}.{self.table}"
+        return f"{self.catalog}.{self.schema_name}.{self.table}" if self.catalog else f"{self.schema_name}.{self.table}"
 
 class PiiSplitConfig(BaseModel):
     name: str
     target_catalog: str
     target_schema: str
     target_table: str
+    table_comment: Optional[str] = Field(None, description="Semantic description of the PII table for catalog & compliance")
     unique_keys: List[str]
     foreign_key_expr: str
     foreign_key_name: str
@@ -50,7 +53,7 @@ class PiiSplitConfig(BaseModel):
 
     @property
     def fqdn(self) -> str:
-        return f"{self.target_catalog}.{self.target_schema}.{self.target_table}"
+        return f"{self.target_catalog}.{self.target_schema}.{self.target_table}" if self.target_catalog else f"{self.target_schema}.{self.target_table}"
 
 class EntityPipelineConfig(BaseModel):
     version: str = "1.0"

@@ -7,7 +7,7 @@
 
 A production-ready, metadata-driven framework for building scalable **Medallion Lakehouse Architectures** on Databricks.
 
-Instead of writing bespoke, repetitive pipeline code and compiling monolithic binaries for every new entity, this framework uses **declarative YAML definitions** evaluated by a generic, optimized PySpark streaming engine with **automated PII segregation**, **Databricks Liquid Clustering**, and **Terraform IaC**.
+Instead of writing bespoke, repetitive pipeline code and compiling monolithic binaries for every new entity, this framework uses **declarative YAML definitions** evaluated by a generic, optimized PySpark streaming engine with **automated PII segregation**, **Databricks Liquid Clustering**, **automated Unity Catalog semantic comments for AI/LLM Text-to-SQL**, and **Terraform IaC**.
 
 Works identically across **Databricks Enterprise (Unity Catalog)**, **Databricks Community Edition (100% Free Tier)**, and **local laptop PySpark environments**.
 
@@ -27,10 +27,11 @@ flowchart TD
         MicroBatch["Structured Streaming Micro-Batch<br/>(Trigger.AvailableNow)"]
         Parser["Declarative YAML Evaluator<br/>(Pydantic validated)"]
         Dedup["In-Batch Window Deduplication<br/>(row_number() == 1 over primary keys)"]
+        CatalogSync["Automated Unity Catalog Sync<br/>(TABLE & COLUMN comments for AI Agents)"]
     end
 
     subgraph GoldDW ["Curated Gold Analytics Layer"]
-        GoldTable[("dim_subscriptions<br/>saas_dw.subscription_analytics<br/>- Liquid Clustered on started_at<br/>- Date-Pruned Idempotent MERGE<br/>- Deterministic Hash: subscriber_account_id")]
+        GoldTable[("dim_subscriptions<br/>saas_dw.subscription_analytics<br/>- Liquid Clustered on started_at<br/>- Date-Pruned Idempotent MERGE<br/>- Deterministic Hash: subscriber_account_id<br/>- Enriched with semantic column comments")]
     end
 
     subgraph PIILayer ["Isolated PII Security Layer"]
@@ -40,8 +41,9 @@ flowchart TD
     StreamSrc --> MicroBatch
     MicroBatch --> Parser
     Parser --> Dedup
-    Dedup -->|"Extract non-PII metrics"| GoldTable
-    Dedup -->|"Route sensitive identity fields"| PIITable
+    Dedup --> CatalogSync
+    CatalogSync -->|"Extract non-PII metrics"| GoldTable
+    CatalogSync -->|"Route sensitive identity fields"| PIITable
     GoldTable -.->|"Secure JOIN via xxhash64"| PIITable
 ```
 
@@ -59,6 +61,7 @@ sequenceDiagram
     Engine->>Engine: Cache batch & inspect incoming dates
     Engine->>Engine: Window dedup across unique_keys
     Engine->>Gold: Auto-create table with Liquid Clustering (if not exists)
+    Engine->>Gold: Sync TABLE & COLUMN comments for AI agents (Databricks Genie)
     Engine->>Gold: Pruned MERGE: (target.date IN (batch.dates) AND target.id = source.id)
     Engine->>PII: Extract PII fields & compute xxhash64 FK
     Engine->>PII: Auto-create PII table & execute idempotent MERGE
@@ -70,11 +73,40 @@ sequenceDiagram
 ## 🤖 Context Files for AI Agents (Cursor, Claude, Copilot)
 
 This repository includes full architectural context specifications in the [`context/`](context/) directory to allow LLMs to generate compliant configs and code without hallucinations:
-- **[`CLAUDE.md`](CLAUDE.md)**: Agent rules, command cheat-sheet, and code style.
+- **[`CLAUDE.md`](CLAUDE.md)**: AI agent rules, command cheat-sheet, and code style.
+- **[`context/agentic_semantic_catalog.md`](context/agentic_semantic_catalog.md)**: Automated table and column comments for AI Text-to-SQL (Genie / LangChain).
 - **[`context/architecture_overview.md`](context/architecture_overview.md)**: Medallion design and declarative metadata concepts.
 - **[`context/delta_lake_engine_norms.md`](context/delta_lake_engine_norms.md)**: Liquid clustering rules, in-batch deduplication, and pruned MERGE patterns.
 - **[`context/pii_segregation_patterns.md`](context/pii_segregation_patterns.md)**: PII isolation, deterministic hash linkage (`xxhash64`), and dynamic column masking UDFs.
 - **[`context/databricks_free_tier_guide.md`](context/databricks_free_tier_guide.md)**: Complete guide for Databricks Community Edition and local environments.
+
+---
+
+## 🧠 Automated Semantic Catalog for AI Agents & Databricks Genie
+
+AI agents and Text-to-SQL tools require human-level semantic clarity to write accurate queries. Instead of maintaining separate documentation that drifts from code, developers declare business definitions directly in YAML:
+
+```yaml
+gold:
+  table: "dim_subscriptions"
+  table_comment: "Curated SaaS subscription dimension. Non-PII analytics safe."
+  fields:
+    - name: "mrr_amount"
+      type: "double"
+      expr: "cast(payload.plan.amountCents as double) / 100.0"
+      description: "Monthly Recurring Revenue normalized to USD dollars. Always use this column for revenue KPIs."
+    - name: "is_trial"
+      type: "boolean"
+      expr: "cast(payload.isTrial as boolean)"
+      description: "Flag indicating whether the subscription is currently in a promotional zero-cost trial period."
+```
+
+During table provisioning and schema synchronization, the engine automatically runs:
+```sql
+COMMENT ON TABLE saas_dw.subscription_analytics.dim_subscriptions IS '...';
+ALTER TABLE saas_dw.subscription_analytics.dim_subscriptions ALTER COLUMN mrr_amount COMMENT '...';
+```
+This guarantees that **Databricks Genie**, **Claude**, and internal analysts always have synchronized, self-documenting data models.
 
 ---
 
@@ -87,6 +119,7 @@ This repository includes full architectural context specifications in the [`cont
 │   └── examples/
 │       └── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
 ├── context/                       # In-depth architectural context for LLMs & Engineers
+│   ├── agentic_semantic_catalog.md# Semantic metadata & Unity Catalog comments
 │   ├── architecture_overview.md
 │   ├── delta_lake_engine_norms.md
 │   ├── pii_segregation_patterns.md
@@ -97,7 +130,7 @@ This repository includes full architectural context specifications in the [`cont
 │       ├── models/
 │       │   └── config.py          # Pydantic schema validation for configs
 │       └── core/
-│           ├── delta_ops.py       # Liquid clustering, in-batch dedup, pruned MERGE
+│           ├── delta_ops.py       # Liquid clustering, in-batch dedup, pruned MERGE, catalog comment sync
 │           ├── pii.py             # PII extraction and isolation logic
 │           ├── streaming.py       # Micro-batch streaming coordinator
 │           └── transformer.py     # SQL expression and attribute evaluator
@@ -143,6 +176,7 @@ gold:
   catalog: "saas_dw"
   schema: "subscription_analytics"
   table: "dim_subscriptions"
+  table_comment: "Curated SaaS subscription dimension. Non-PII analytics safe."
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
   prune_column: "started_at"
@@ -150,18 +184,23 @@ gold:
     - name: "subscription_id"
       type: "string"
       expr: "payload.subscriptionId"
+      description: "Unique natural primary identifier for the subscription contract."
     - name: "plan_tier"
       type: "string"
       expr: "payload.plan.tier"
+      description: "Product tier associated with the subscription (e.g. Starter, Pro, Enterprise)."
     - name: "mrr_amount"
       type: "double"
       expr: "cast(payload.plan.amountCents as double) / 100.0"
+      description: "Monthly Recurring Revenue normalized to USD dollars. Always use this column for revenue KPIs."
     - name: "started_at"
       type: "timestamp"
       expr: "cast(payload.startedOn as timestamp)"
+      description: "Timestamp when the subscription contract was originally initiated."
     - name: "subscriber_account_id"
       type: "string"
       expr: "xxhash64(cast(payload.subscriberId as string))"
+      description: "Deterministic 64-bit hash key linking to dim_subscriber_profiles in the secure PII schema."
 
 # Automated PII Isolation: Route contact data to restricted _pii schema
 pii_splits:
@@ -169,6 +208,7 @@ pii_splits:
     target_catalog: "saas_dw"
     target_schema: "subscription_analytics_pii"
     target_table: "dim_subscriber_profiles"
+    table_comment: "Restricted subscriber identity and PII profile dimension."
     unique_keys: ["subscriber_account_id"]
     foreign_key_expr: "xxhash64(cast(payload.subscriberId as string))"
     foreign_key_name: "subscriber_account_id"
@@ -177,10 +217,12 @@ pii_splits:
       - name: "subscriber_email"
         type: "string"
         expr: "payload.subscriber.email"
+        description: "Subscriber primary contact email address. Protected by dynamic masking policy."
         mask_policy: "mask_email"
       - name: "billing_phone"
         type: "string"
         expr: "payload.subscriber.phone"
+        description: "Direct contact phone number."
 ```
 
 ### Step 2: Validate Locally

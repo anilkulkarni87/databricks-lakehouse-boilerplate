@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional
 from pyspark.sql import DataFrame, functions as F
 from delta.tables import DeltaTable
+from lakehouse_engine.models.config import FieldDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -21,21 +22,57 @@ def deduplicate_batch(df: DataFrame, unique_keys: List[str], order_by_col: Optio
         .drop("_row_rank")
     )
 
+def sync_catalog_comments(
+    spark,
+    table_fqdn: str,
+    table_comment: Optional[str],
+    fields: List[FieldDefinition]
+) -> None:
+    """
+    Syncs declarative table and column descriptions into Unity Catalog / Metastore.
+    Enables Text-to-SQL AI Agents (e.g. Databricks Genie) to accurately understand schema semantics.
+    """
+    # 1. Sync Table Comment
+    if table_comment:
+        escaped_tbl_comment = table_comment.replace("'", "\\'")
+        try:
+            spark.sql(f"COMMENT ON TABLE {table_fqdn} IS '{escaped_tbl_comment}'")
+            logger.info(f"Updated table comment on {table_fqdn}")
+        except Exception as e:
+            logger.warning(f"Could not update table comment on {table_fqdn}: {e}")
+
+    # 2. Sync Column Comments
+    for field in fields:
+        if field.description:
+            escaped_col_comment = field.description.replace("'", "\\'")
+            try:
+                spark.sql(f"ALTER TABLE {table_fqdn} ALTER COLUMN {field.name} COMMENT '{escaped_col_comment}'")
+                logger.debug(f"Updated column comment on {table_fqdn}.{field.name}")
+            except Exception as e:
+                logger.warning(f"Could not update column comment on {table_fqdn}.{field.name}: {e}")
+
 def ensure_delta_table(
     spark,
     table_fqdn: str,
     df: DataFrame,
-    cluster_by: List[str]
+    cluster_by: List[str],
+    table_comment: Optional[str] = None,
+    fields: Optional[List[FieldDefinition]] = None
 ) -> None:
     """
-    Auto-provisions the Delta table with Databricks Liquid Clustering if it does not exist.
+    Auto-provisions the Delta table with Databricks Liquid Clustering and syncs catalog descriptions.
     """
-    if not spark.catalog.tableExists(table_fqdn):
+    table_is_new = not spark.catalog.tableExists(table_fqdn)
+    if table_is_new:
         logger.info(f"Table {table_fqdn} does not exist. Creating with schema and clustering: {cluster_by}")
         writer = df.limit(0).write.format("delta").mode("ignore")
         if cluster_by:
             writer = writer.clusterBy(*cluster_by)
         writer.saveAsTable(table_fqdn)
+
+    # Sync table and column comments into Unity Catalog metadata
+    if fields:
+        sync_catalog_comments(spark, table_fqdn, table_comment, fields)
 
 def merge_batch_pruned(
     spark,
