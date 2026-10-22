@@ -1,6 +1,6 @@
-# Phase 2 Governance: Declarative Expectations & Historical Backfills
+# Data Quality Expectations & Historical Backfills Guide
 
-This document explains the two governance capabilities implemented in Phase 2:
+This document details the governance and operational restatement capabilities of the Lakehouse Engine:
 1. **Declarative Data Quality Expectations (Circuit Breakers & Quarantining)**
 2. **Historical Backfill CLI (`lakehouse-engine backfill`)**
 

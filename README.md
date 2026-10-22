@@ -97,10 +97,10 @@ flowchart TD
 │   └── examples/
 │       └── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
 ├── context/                       # In-depth architectural context for LLMs & Engineers
-│   ├── mcp_server_guide.md        # Model Context Protocol (MCP) server guide
+│   ├── dlq_and_telemetry_guide.md # Zero-loss DLQ quarantine and audit log schema
+│   ├── data_quality_and_backfill_guide.md # Data quality expectations & backfill guide
 │   ├── databricks_variant_guide.md# Native Databricks binary VARIANT guide
-│   ├── phase2_governance_guide.md # Data quality expectations & backfill guide
-│   ├── phase1_hardening_guide.md  # DLQ and Operational Telemetry specifications
+│   ├── mcp_server_guide.md        # Model Context Protocol (MCP) server guide
 │   ├── genie_kimball_modeling_guide.md
 │   ├── agentic_semantic_catalog.md
 │   ├── architecture_overview.md
@@ -134,8 +134,9 @@ flowchart TD
 ├── tests/
 │   ├── conftest.py                # Local PySpark session fixture
 │   ├── test_config.py             # Pydantic YAML schema validation tests
-│   ├── test_phase1_dlq_audit.py   # DLQ & Telemetry test assertions
-│   └── test_phase2_expectations_backfill.py # Expectations test assertions
+│   ├── test_dlq_audit.py          # DLQ quarantine & telemetry test assertions
+│   ├── test_expectations_backfill.py # Expectations & historical backfill assertions
+│   └── test_mcp_and_variant.py    # VARIANT parsing & MCP server assertions
 ├── .mcp.json                      # MCP client config for Cursor, Claude & AI tools
 ├── CLAUDE.md                      # AI agent coding guidelines & rules
 ├── pyproject.toml                 # Modern PEP 621 Python packaging
@@ -173,12 +174,12 @@ gold:
   cluster_by: ["started_at"]
   prune_column: "started_at"
   
-  # Phase 1: DLQ & Rescued Data
+  # DLQ & Rescued Data
   enable_dlq: true
   dlq_table: "saas_dw.subscription_analytics.dim_subscriptions_dlq"
   track_rescued_data: true
 
-  # Phase 2: Data Quality Rules
+  # Data Quality Rules
   expectations:
     - name: "valid_mrr"
       expr: "mrr_amount >= 0.0"

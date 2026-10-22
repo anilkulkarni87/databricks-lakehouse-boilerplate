@@ -1,6 +1,6 @@
-# Phase 1 Production Hardening: Dead-Letter Queue & Operational Telemetry
+# Dead-Letter Queue (DLQ) & Operational Telemetry Guide
 
-This document details the two mission-critical production hardening pillars implemented in Phase 1:
+This document details the two operational reliability pillars of the Lakehouse Engine:
 1. **Zero Data Loss via Dead-Letter Queue (DLQ) & `_rescued_payload`**
 2. **Centralized Micro-Batch Operational Telemetry Audit Logging**
 

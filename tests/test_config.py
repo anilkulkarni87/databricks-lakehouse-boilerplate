@@ -1,42 +1,46 @@
-import pytest
+import unittest
 import yaml
 from pathlib import Path
 from lakehouse_engine.models.config import EntityPipelineConfig
 
-def test_subscriptions_config_validates():
-    config_path = Path(__file__).parents[1] / "configs" / "examples" / "subscriptions.yml"
-    with open(config_path) as f:
-        data = yaml.safe_load(f)
+class TestConfig(unittest.TestCase):
+    def test_subscriptions_config_validates(self):
+        config_path = Path(__file__).parents[1] / "configs" / "examples" / "subscriptions.yml"
+        with open(config_path) as f:
+            data = yaml.safe_load(f)
 
-    config = EntityPipelineConfig.model_validate(data)
-    assert config.entity_name == "subscriptions"
-    assert config.gold.fqdn == "saas_dw.subscription_analytics.dim_subscriptions"
-    assert config.gold.table_comment is not None
-    assert "Curated SaaS subscription dimension" in config.gold.table_comment
-    assert len(config.gold.fields) == 12
+        config = EntityPipelineConfig.model_validate(data)
+        self.assertEqual(config.entity_name, "subscriptions")
+        self.assertEqual(config.gold.fqdn, "saas_dw.subscription_analytics.dim_subscriptions")
+        self.assertIsNotNone(config.gold.table_comment)
+        self.assertIn("Curated SaaS subscription dimension", config.gold.table_comment)
+        self.assertEqual(len(config.gold.fields), 12)
 
-    # Verify column comments
-    mrr_field = next(f for f in config.gold.fields if f.name == "mrr_amount")
-    assert mrr_field.description is not None
-    assert "Monthly Recurring Revenue" in mrr_field.description
+        # Verify column comments
+        mrr_field = next(f for f in config.gold.fields if f.name == "mrr_amount")
+        self.assertIsNotNone(mrr_field.description)
+        self.assertIn("Monthly Recurring Revenue", mrr_field.description)
 
-    # Verify Kimball & Genie Extensions
-    assert len(config.gold.foreign_keys) == 1
-    assert config.gold.foreign_keys[0].column == "subscriber_account_id"
-    assert len(config.gold.metrics) == 3
-    assert config.gold.metrics[0].name == "Total MRR"
-    assert "status = 'ACTIVE'" in config.gold.metrics[0].sql_formula
+        # Verify Kimball & Genie Extensions
+        self.assertEqual(len(config.gold.foreign_keys), 1)
+        self.assertEqual(config.gold.foreign_keys[0].column, "subscriber_account_id")
+        self.assertEqual(len(config.gold.metrics), 3)
+        self.assertEqual(config.gold.metrics[0].name, "Total MRR")
+        self.assertIn("status = 'ACTIVE'", config.gold.metrics[0].sql_formula)
 
-    assert len(config.pii_splits) == 1
-    assert config.pii_splits[0].fqdn == "saas_dw.subscription_analytics_pii.dim_subscriber_profiles"
-    assert config.pii_splits[0].table_comment is not None
+        self.assertEqual(len(config.pii_splits), 1)
+        self.assertEqual(config.pii_splits[0].fqdn, "saas_dw.subscription_analytics_pii.dim_subscriber_profiles")
+        self.assertIsNotNone(config.pii_splits[0].table_comment)
 
-def test_template_config_validates():
-    template_path = Path(__file__).parents[1] / "configs" / "templates" / "entity_template.yml"
-    with open(template_path) as f:
-        data = yaml.safe_load(f)
+    def test_template_config_validates(self):
+        template_path = Path(__file__).parents[1] / "configs" / "templates" / "entity_template.yml"
+        with open(template_path) as f:
+            data = yaml.safe_load(f)
 
-    config = EntityPipelineConfig.model_validate(data)
-    assert config.entity_name == "example_entity"
-    assert config.runtime.trigger_type == "AvailableNow"
-    assert config.gold.table_comment is not None
+        config = EntityPipelineConfig.model_validate(data)
+        self.assertEqual(config.entity_name, "example_entity")
+        self.assertEqual(config.runtime.trigger_type, "AvailableNow")
+        self.assertIsNotNone(config.gold.table_comment)
+
+if __name__ == "__main__":
+    unittest.main()

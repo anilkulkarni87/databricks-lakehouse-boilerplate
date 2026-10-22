@@ -140,14 +140,18 @@ def handle_export_genie(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"content": [{"type": "text", "text": doc}]}
 
 def handle_generate_scaffold(args: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        sample = json.loads(args["sample_json"])
-    except Exception as e:
-        return {"isError": True, "content": [{"type": "text", "text": f"Invalid JSON string: {e}"}]}
+    sample_raw = args.get("sample_json", "{}")
+    if isinstance(sample_raw, dict):
+        sample = sample_raw
+    else:
+        try:
+            sample = json.loads(sample_raw) if sample_raw else {}
+        except Exception as e:
+            return {"isError": True, "content": [{"type": "text", "text": f"Invalid JSON string: {e}"}]}
 
-    entity_name = args["entity_name"]
-    source_table = args["source_table"]
-    target_table = args["target_table"]
+    entity_name = args.get("entity_name", "new_entity")
+    source_table = args.get("source_table", "raw.silver_events")
+    target_table = args.get("target_table", f"saas_dw.analytics.dim_{entity_name}")
 
     # Parse target catalog/schema/table
     parts = target_table.split(".")
@@ -185,6 +189,14 @@ def handle_generate_scaffold(args: Dict[str, Any]) -> Dict[str, Any]:
             pii_fields.append(field_spec)
         else:
             fields.append(field_spec)
+
+    if not fields:
+        fields.append({
+            "name": "id",
+            "type": "string",
+            "expr": "payload.id",
+            "description": f"Unique identifier for {entity_name}"
+        })
 
     scaffold = {
         "version": "1.0",

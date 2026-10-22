@@ -20,7 +20,7 @@ tasks:
   test:
     desc: Run unit tests with pytest
     cmds:
-      - pytest tests/ -v
+      - python3 -m unittest discover -s tests -p "test_*.py" -v
 
   build:
     desc: Build Python wheel artifact for Databricks deployment
