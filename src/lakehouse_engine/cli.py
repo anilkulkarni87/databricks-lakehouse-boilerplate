@@ -98,6 +98,16 @@ def export_genie(configs_dir: str, output_file: str):
     out_path.write_text(doc)
     print(f"Successfully generated Databricks Genie Space instructions: {out_path.resolve()}")
 
+
+@cli.command("mcp-serve")
+def mcp_serve():
+    """
+    Starts the Model Context Protocol (MCP) server over standard I/O (stdio).
+    Exposes declarative entity validation, schema listing, and Genie docs to AI agents.
+    """
+    from lakehouse_engine.mcp.server import run_mcp_server
+    run_mcp_server()
+
 def main():
     cli()
 

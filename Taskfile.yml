@@ -60,3 +60,8 @@ tasks:
     desc: "Run historical batch backfill (Usage: task backfill CONFIG=configs/examples/subscriptions.yml START=2026-01-01 END=2026-03-31)"
     cmds:
       - python3 -m lakehouse_engine.cli backfill --config-path {{.CONFIG}} {{if .START}}--start-date {{.START}}{{end}} {{if .END}}--end-date {{.END}}{{end}}
+
+  mcp:serve:
+    desc: Start Model Context Protocol (MCP) server for AI coding and data modeling agents
+    cmds:
+      - python3 -m lakehouse_engine.cli mcp-serve

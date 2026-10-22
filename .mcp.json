@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "lakehouse-engine": {
+      "command": "python3",
+      "args": ["-m", "lakehouse_engine.cli", "mcp-serve"],
+      "env": {
+        "PYTHONPATH": "src"
+      }
+    }
+  }
+}

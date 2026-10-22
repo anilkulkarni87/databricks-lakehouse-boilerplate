@@ -97,6 +97,8 @@ flowchart TD
 │   └── examples/
 │       └── subscriptions.yml      # Anonymized SaaS subscription + PII profile example
 ├── context/                       # In-depth architectural context for LLMs & Engineers
+│   ├── mcp_server_guide.md        # Model Context Protocol (MCP) server guide
+│   ├── databricks_variant_guide.md# Native Databricks binary VARIANT guide
 │   ├── phase2_governance_guide.md # Data quality expectations & backfill guide
 │   ├── phase1_hardening_guide.md  # DLQ and Operational Telemetry specifications
 │   ├── genie_kimball_modeling_guide.md
@@ -107,7 +109,9 @@ flowchart TD
 │   └── databricks_free_tier_guide.md
 ├── src/
 │   └── lakehouse_engine/
-│       ├── cli.py                 # CLI commands: run, backfill, export-genie
+│       ├── cli.py                 # CLI commands: run, backfill, export-genie, mcp-serve
+│       ├── mcp/
+│       │   └── server.py          # Native Model Context Protocol (MCP) server
 │       ├── models/
 │       │   └── config.py          # Pydantic schema validation for configs
 │       └── core/
@@ -132,6 +136,7 @@ flowchart TD
 │   ├── test_config.py             # Pydantic YAML schema validation tests
 │   ├── test_phase1_dlq_audit.py   # DLQ & Telemetry test assertions
 │   └── test_phase2_expectations_backfill.py # Expectations test assertions
+├── .mcp.json                      # MCP client config for Cursor, Claude & AI tools
 ├── CLAUDE.md                      # AI agent coding guidelines & rules
 ├── pyproject.toml                 # Modern PEP 621 Python packaging
 ├── Taskfile.yml                   # Unified developer automation commands
