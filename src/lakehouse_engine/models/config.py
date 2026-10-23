@@ -49,11 +49,19 @@ class SourceConfig(BaseModel):
     def fqdn(self) -> str:
         return f"{self.catalog}.{self.schema_name}.{self.table}" if self.catalog else f"{self.schema_name}.{self.table}"
 
+class AlertWebhookConfig(BaseModel):
+    enabled: bool = Field(False, description="Enable real-time webhook alerting on DLQ quarantine or batch failures")
+    url: Optional[str] = Field(None, description="Webhook URL (Slack, MS Teams, PagerDuty, or custom endpoint). Supports ${SLACK_WEBHOOK_URL}")
+    channel: Optional[str] = Field(None, description="Optional Slack / Teams channel name")
+    min_quarantined_threshold: int = Field(1, description="Minimum number of quarantined rows in a batch before triggering an alert")
+    include_summary: bool = Field(True, description="Include root-cause breakdown in the alert message")
+
 class RuntimeConfig(BaseModel):
     trigger_type: str = "AvailableNow"
     max_mbytes_per_trigger: int = 2000
     checkpoint_location: str
     audit_table: Optional[str] = Field(None, description="Centralized operational telemetry audit table FQDN")
+    alert_webhook: Optional[AlertWebhookConfig] = Field(default_factory=AlertWebhookConfig, description="Optional real-time alert webhook configuration")
 
 class TargetTableConfig(BaseModel):
     catalog: str

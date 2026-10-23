@@ -1,0 +1,6 @@
+title: Lakehouse Engine
+description: Declarative ETL, Autonomous DLQ Triage, and Genie AI Semantic Framework for Databricks
+theme: jekyll-theme-primer
+show_downloads: true
+github:
+  repository_url: https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate

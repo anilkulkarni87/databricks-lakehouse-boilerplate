@@ -8,6 +8,7 @@ from lakehouse_engine.core.delta_ops import ensure_delta_table, merge_batch_prun
 from lakehouse_engine.core.dlq import split_valid_and_dlq, write_dlq_table
 from lakehouse_engine.core.expectations import evaluate_data_quality_rules
 from lakehouse_engine.core.audit import log_batch_audit, extract_delta_merge_metrics
+from lakehouse_engine.core.alerts import send_dlq_webhook_alert
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,16 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
                 total_dlq_rows = all_dlq_df.count()
                 if config.gold.enable_dlq:
                     write_dlq_table(spark, config.gold.dlq_fqdn, all_dlq_df)
+
+                # Real-Time Operational Alerting Hook
+                if config.runtime.alert_webhook and config.runtime.alert_webhook.enabled:
+                    send_dlq_webhook_alert(
+                        alert_config=config.runtime.alert_webhook,
+                        entity_name=config.entity_name,
+                        batch_id=batch_id,
+                        quarantined_count=total_dlq_rows,
+                        dlq_table=config.gold.dlq_fqdn
+                    )
 
             # 4. Provision & MERGE Valid Records into Gold
             if not clean_gold_df.isEmpty():

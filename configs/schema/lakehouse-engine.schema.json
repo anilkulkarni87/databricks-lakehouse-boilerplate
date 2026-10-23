@@ -1,5 +1,55 @@
 {
   "$defs": {
+    "AlertWebhookConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable real-time webhook alerting on DLQ quarantine or batch failures",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Webhook URL (Slack, MS Teams, PagerDuty, or custom endpoint). Supports ${SLACK_WEBHOOK_URL}",
+          "title": "Url"
+        },
+        "channel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional Slack / Teams channel name",
+          "title": "Channel"
+        },
+        "min_quarantined_threshold": {
+          "default": 1,
+          "description": "Minimum number of quarantined rows in a batch before triggering an alert",
+          "title": "Min Quarantined Threshold",
+          "type": "integer"
+        },
+        "include_summary": {
+          "default": true,
+          "description": "Include root-cause breakdown in the alert message",
+          "title": "Include Summary",
+          "type": "boolean"
+        }
+      },
+      "title": "AlertWebhookConfig",
+      "type": "object"
+    },
     "ExpectationConfig": {
       "properties": {
         "name": {
@@ -286,6 +336,17 @@
           "default": null,
           "description": "Centralized operational telemetry audit table FQDN",
           "title": "Audit Table"
+        },
+        "alert_webhook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlertWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional real-time alert webhook configuration"
         }
       },
       "required": [
