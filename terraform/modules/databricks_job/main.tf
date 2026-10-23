@@ -1,3 +1,9 @@
+locals {
+  resolved_config_path = var.config_file_path != null ? var.config_file_path : (
+    var.catalog_name != null && var.config_file_name != null ? "/Volumes/${var.catalog_name}/${var.domain}/configs/${var.config_file_name}" : ""
+  )
+}
+
 resource "databricks_job" "pipeline_job" {
   name                = "${var.job_name}-${var.environment}"
   max_concurrent_runs = 1
@@ -10,12 +16,16 @@ resource "databricks_job" "pipeline_job" {
     }
   }
 
-  tags = {
-    "Environment"   = var.environment
-    "ManagedBy"     = "Terraform"
-    "Framework"     = "LakehouseEngine"
-    "CloudProvider" = var.cloud_provider
-  }
+  tags = merge(
+    {
+      "Environment"   = var.environment
+      "ManagedBy"     = "Terraform"
+      "Framework"     = "LakehouseEngine"
+      "CloudProvider" = var.cloud_provider
+      "Domain"        = var.domain
+    },
+    var.custom_tags
+  )
 
   schedule {
     quartz_cron_expression = var.schedule_cron
@@ -25,18 +35,26 @@ resource "databricks_job" "pipeline_job" {
   job_cluster {
     job_cluster_key = "single_node_worker"
     new_cluster {
-      spark_version  = var.spark_version
-      node_type_id   = var.node_type_id
-      runtime_engine = "PHOTON"
+      num_workers             = 0
+      spark_version           = var.spark_version
+      node_type_id            = var.node_type_id
+      driver_node_type_id     = var.node_type_id
+      runtime_engine          = "PHOTON"
+      data_security_mode      = var.data_security_mode
+      single_user_name        = var.data_security_mode == "SINGLE_USER" ? var.service_principal_id : null
 
       # Single-node cluster optimization
       custom_tags = {
         "ResourceClass" = "SingleNode"
       }
+
       spark_conf = {
-        "spark.master"                                 = "local[*]"
-        "spark.databricks.cluster.profile"             = "singleNode"
-        "spark.databricks.delta.optimizeWrites.enabled" = "true"
+        "spark.master"                                  = "local[*,4]"
+        "spark.databricks.cluster.profile"              = "singleNode"
+        "spark.databricks.delta.optimizeWrites.enabled"  = "true"
+        "spark.databricks.dataLineage.enabled"          = "true"
+        "spark.sql.files.ignoreMissingFiles"            = "true"
+        "spark.scheduler.mode"                          = "FIFO"
       }
 
       # Azure Spot Configuration
@@ -63,6 +81,7 @@ resource "databricks_job" "pipeline_job" {
   task {
     task_key        = "run_entity_pipeline"
     job_cluster_key = "single_node_worker"
+    max_retries     = var.max_retries
 
     library {
       whl = var.wheel_file_path
@@ -73,7 +92,7 @@ resource "databricks_job" "pipeline_job" {
       entry_point  = "cli"
       parameters = [
         "run",
-        "--config-path", var.config_file_path,
+        "--config-path", local.resolved_config_path,
         "--env", var.environment
       ]
     }

@@ -22,7 +22,7 @@ variable "catalog_name" {
 
 variable "domain_name" {
   type        = string
-  description = "Domain name for schemas (e.g. ecommerce, subscriptions)"
+  description = "Default domain name for schemas (e.g. ecommerce, finance, subscriptions)"
   default     = "ecommerce"
 }
 
@@ -36,4 +36,10 @@ variable "manage_grants" {
   type        = bool
   description = "Whether to manage access grants for groups"
   default     = false
+}
+
+variable "service_principal_id" {
+  type        = string
+  description = "Optional Azure Service Principal Application ID to run jobs as"
+  default     = null
 }

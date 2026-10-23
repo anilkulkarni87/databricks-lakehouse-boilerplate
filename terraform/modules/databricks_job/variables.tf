@@ -14,6 +14,18 @@ variable "cloud_provider" {
   default     = "azure"
 }
 
+variable "domain" {
+  type        = string
+  description = "Business domain for this job (e.g. ecommerce, finance, subscriptions)"
+  default     = "ecommerce"
+}
+
+variable "catalog_name" {
+  type        = string
+  description = "Unity Catalog name"
+  default     = null
+}
+
 variable "schedule_cron" {
   type        = string
   description = "Quartz cron expression for job schedule"
@@ -28,7 +40,7 @@ variable "spark_version" {
 
 variable "node_type_id" {
   type        = string
-  description = "Single-node VM instance type (e.g. Standard_D4s_v5 for Azure, i3.xlarge for AWS)"
+  description = "Single-node VM instance type (e.g. Standard_D4s_v5 for Azure, rgd-fleet.xlarge for AWS)"
   default     = "Standard_D4s_v5"
 }
 
@@ -51,11 +63,36 @@ variable "wheel_file_path" {
 
 variable "config_file_path" {
   type        = string
-  description = "Unity Catalog Volume path to the entity YAML config file"
+  description = "Explicit Unity Catalog Volume path to the entity YAML config file"
+  default     = null
+}
+
+variable "config_file_name" {
+  type        = string
+  description = "Config filename inside the domain configs volume (e.g. subscriptions.yml)"
+  default     = null
 }
 
 variable "service_principal_id" {
   type        = string
-  description = "Service principal client ID to run the job as"
+  description = "Service principal client ID / application ID to run the job as"
   default     = null
+}
+
+variable "data_security_mode" {
+  type        = string
+  description = "Unity Catalog data security mode (e.g. SINGLE_USER, USER_ISOLATION, NONE)"
+  default     = "SINGLE_USER"
+}
+
+variable "max_retries" {
+  type        = number
+  description = "Max retry attempts on failure"
+  default     = 3
+}
+
+variable "custom_tags" {
+  type        = map(string)
+  description = "Additional tags to merge with default job tags"
+  default     = {}
 }
