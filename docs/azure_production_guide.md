@@ -191,31 +191,73 @@ INSERT INTO dev_lakehouse.raw_landing.silver_subscription_events VALUES (
 
 ---
 
-### Step 7: Onboarding New Pipeline Jobs (Day-2 Operations)
+### Step 7: Onboarding New Pipeline Jobs & Handling Domain Changes
 
-When your team needs to deploy new pipelines (e.g. `orders`, `clickstream`), use one of two enterprise patterns:
+In an enterprise environment, jobs frequently belong to different business domains (e.g., `ecommerce`, `finance`, `marketing`, `gaming`). 
 
-#### Pattern A: Dynamic Parameterization (Fastest — Zero Terraform Changes)
-1. Commit `configs/entities/orders.yaml` to Git.
-2. CI/CD syncs the YAML to `/Volumes/dev_lakehouse/ecommerce/configs/orders.yaml`.
-3. Trigger the shared job passing `--config-path /Volumes/.../orders.yaml`.
-*Onboarding Time*: Under 2 minutes.
+#### Decoupling Domains per Job (Avoiding the Single-Domain Trap):
+Instead of tying all jobs to a single global `domain_name` in `dev.tfvars`, the `databricks_job` module allows **explicit per-job domain mapping**:
 
-#### Pattern B: Dedicated Terraform Job (Isolated Compute & Custom Crons)
-Add a new module block in `terraform/main.tf`:
 ```hcl
-module "orders_pipeline_job" {
-  source           = "./modules/databricks_job"
-  job_name         = "lakehouse-orders"
-  environment      = var.environment
-  cloud_provider   = var.cloud_provider
-  node_type_id     = var.node_type_id
-  wheel_file_path  = "/Volumes/${var.catalog_name}/${var.domain_name}/library/lakehouse_engine-0.1.0-py3-none-any.whl"
-  config_file_path = "/Volumes/${var.catalog_name}/${var.domain_name}/configs/orders.yaml"
-  schedule_cron    = "0 30 * * * ?" # Runs at :30 past every hour
+module "subscriptions_pipeline_job" {
+  source               = "./modules/databricks_job"
+  job_name             = "lakehouse-subscriptions"
+  environment          = var.environment
+  cloud_provider       = var.cloud_provider
+  catalog_name         = var.catalog_name
+  
+  # Explicit Domain & Auto-Resolved Config:
+  domain               = "finance"            # Overrides default domain!
+  config_file_name     = "subscriptions.yml"  # Auto-resolves: /Volumes/${catalog}/finance/configs/subscriptions.yml
+  
+  node_type_id         = var.node_type_id
+  service_principal_id = var.service_principal_id
+  data_security_mode   = "SINGLE_USER"
+  max_retries          = 3
+  schedule_cron        = "0 15 * * * ?"
+  
+  custom_tags = {
+    "lakehouse.jobName"     = "subscriptions-shared"
+    "lakehouse.alertThresholdHours" = "24"
+  }
 }
 ```
-Run `terraform apply -var-file="env_conf/prod.tfvars"` to provision the new scheduled job.
+
+#### Enterprise Single-User & Unity Catalog Cluster Specs:
+The `databricks_job` module implements the standard enterprise single-node pattern:
+* **Zero Workers (`num_workers = 0`)**: Uses single-node local execution (`local[*,4]`) for low-cost micro-batching.
+* **Unity Catalog Compliance (`data_security_mode = "SINGLE_USER"`)**: Ensures fine-grained Unity Catalog data governance when executed by a service principal.
+* **Spark Optimization Flags**:
+  * `spark.databricks.dataLineage.enabled: "true"`
+  * `spark.databricks.delta.optimizeWrites.enabled: "true"`
+  * `spark.sql.files.ignoreMissingFiles: "true"`
+  * `spark.scheduler.mode: "FIFO"`
+
+#### Day-2 Deployment Patterns for New Entities:
+
+##### Pattern A: Dynamic Parameterization (Fastest — Zero Terraform Changes)
+1. Commit `configs/entities/orders.yaml` to Git under domain `ecommerce`.
+2. CI/CD syncs the YAML to `/Volumes/dev_lakehouse/ecommerce/configs/orders.yaml`.
+3. Trigger the universal runner passing `--config-path /Volumes/.../orders.yaml`.
+*Onboarding Time*: Under 2 minutes.
+
+##### Pattern B: Dedicated Terraform Job (Isolated Compute & Custom Crons)
+Add a new module block in `terraform/main.tf` specifying the entity domain, schedule, and tags:
+```hcl
+module "orders_pipeline_job" {
+  source               = "./modules/databricks_job"
+  job_name             = "lakehouse-orders"
+  environment          = var.environment
+  cloud_provider       = var.cloud_provider
+  catalog_name         = var.catalog_name
+  domain               = "ecommerce"
+  config_file_name     = "orders.yml"
+  node_type_id         = "Standard_D4s_v5"
+  service_principal_id = var.service_principal_id
+  schedule_cron        = "0 30 * * * ?" # Runs at :30 past every hour
+}
+```
+Run `terraform apply -var-file="env_conf/dev.tfvars"` to provision the new scheduled job.
 
 ---
 
