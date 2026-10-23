@@ -1,13 +1,22 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class FieldDefinition(BaseModel):
     name: str = Field(..., description="Target column name")
     type: str = Field(..., description="Spark SQL data type")
     expr: str = Field(..., description="SQL transformation expression")
     description: Optional[str] = Field(None, description="Semantic description for Unity Catalog / Genie Text-to-SQL")
+    comment: Optional[str] = Field(None, description="Alternative alias for column description")
     is_primary_key: bool = Field(False, description="Whether this column is part of the primary key")
     mask_policy: Optional[str] = Field(None, description="Unity Catalog Column Mask UDF name")
+
+    @model_validator(mode="after")
+    def sync_comment_and_description(self):
+        if not self.description and self.comment:
+            self.description = self.comment
+        elif not self.comment and self.description:
+            self.comment = self.description
+        return self
 
 class ForeignKeyReference(BaseModel):
     column: str = Field(..., description="Foreign key column name in this table")
@@ -51,6 +60,7 @@ class TargetTableConfig(BaseModel):
     schema_name: str = Field(..., alias="schema")
     table: str
     table_comment: Optional[str] = Field(None, description="Semantic description of the table for catalog & Genie")
+    comment: Optional[str] = Field(None, description="Alternative alias for table_comment")
     table_type: str = Field("dimension", description="'fact' or 'dimension' for Kimball modeling")
     unique_keys: List[str]
     cluster_by: List[str] = []
