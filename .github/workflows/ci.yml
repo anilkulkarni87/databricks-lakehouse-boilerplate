@@ -1,0 +1,64 @@
+name: CI & Quality Assurance
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Build & Dev Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pytest
+          pip install -e ".[dev]"
+
+      - name: Run Unit Test Suite
+        env:
+          PYTHONPATH: src
+        run: |
+          python3 -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Validate Entity YAML Configurations Against Pydantic Models
+        env:
+          PYTHONPATH: src
+        run: |
+          python3 -c '
+          from pathlib import Path
+          from lakehouse_engine.core.config_loader import load_pipeline_config
+          
+          config_dir = Path("configs")
+          yaml_files = list(config_dir.glob("**/*.yml")) + list(config_dir.glob("**/*.yaml"))
+          print(f"Validating {len(yaml_files)} YAML configurations...")
+          for yf in yaml_files:
+              print(f" -> Validating {yf}")
+              load_pipeline_config(yf, {"CATALOG": "test_cat", "CHECKPOINT_ROOT": "/test/root"})
+          print(" All YAML configurations validated successfully!")
+          '
+
+      - name: Verify JSON Schema Export
+        env:
+          PYTHONPATH: src
+        run: |
+          python3 -m lakehouse_engine.cli export-schema
+          git diff --exit-code configs/schema/lakehouse-engine.schema.json || (echo "JSON schema out of date! Run task schema:export and commit." && exit 1)
+
+      - name: Build Distribution Wheel
+        run: |
+          python -m build --wheel
+          ls -la dist/

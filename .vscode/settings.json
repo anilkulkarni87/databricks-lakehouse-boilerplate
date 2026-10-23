@@ -1,0 +1,9 @@
+{
+  "yaml.schemas": {
+    "./configs/schema/lakehouse-engine.schema.json": [
+      "configs/**/*.yaml",
+      "configs/**/*.yml"
+    ]
+  },
+  "python.analysis.extraPaths": ["src"]
+}

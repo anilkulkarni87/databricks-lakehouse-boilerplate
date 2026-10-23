@@ -254,14 +254,39 @@ python3 -m lakehouse_engine.cli backfill --config-path configs/examples/subscrip
 | Command | Description |
 | :--- | :--- |
 | `task install` | Installs local Python environment and dev dependencies |
-| `task test` | Runs unit tests with `pytest` |
+| `task test` | Runs unit tests across all engine domains |
+| `task schema:export` | Exports JSON Schema for IDE autocomplete (`lakehouse-engine.schema.json`) |
+| `task scaffold NAME=...` | Scaffolds declarative YAML configuration from sample JSON |
+| `task dlq:triage` | Runs Autonomous DLQ Triage on quarantined records |
+| `task genie:export` | Compiles Genie Space instructions & UC constraint DDLs |
+| `task backfill CONFIG=...` | Runs historical batch backfill without altering streaming checkpoints |
+| `task build` | Builds the lightweight `.whl` package to `dist/` |
 | `task lint` | Runs `ruff` linter and `mypy` type checking |
 | `task format` | Formats code with `ruff` |
-| `task build` | Builds the lightweight `.whl` package to `dist/` |
-| `task genie:export` | Compiles Genie Space instructions & UC constraint DDLs |
-| `task backfill CONFIG=...` | Runs historical batch backfill |
 | `task tf:plan ENV=dev` | Runs `terraform plan` against specified environment |
 | `task tf:apply ENV=prod` | Deploys Terraform resources to specified environment |
+
+---
+
+## 🚀 Databricks Asset Bundles (DABs) & Production Scheduling
+
+This repository includes a production-grade [`databricks.yml`](databricks.yml) configuration for deploying and orchestrating pipelines via Databricks Asset Bundles:
+
+```bash
+# Validate bundle configuration
+databricks bundle validate -t dev
+
+# Deploy code artifacts and workflow jobs to Databricks
+databricks bundle deploy -t dev
+
+# Run scheduled micro-batch or parameterized entity runner
+databricks bundle run daily_subscriptions_streaming -t dev
+```
+
+---
+
+## 🤝 Contributing
+Contributions are warmly welcomed! Please read our [Contributing Guide](CONTRIBUTING.md) for details on code style, running tests with `task test`, and submitting pull requests.
 
 ---
 

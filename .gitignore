@@ -6,3 +6,9 @@ __pycache__/
 *.tfstate
 metastore_db/
 spark-warehouse/
+
+# Build & Distribution Artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/

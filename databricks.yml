@@ -1,0 +1,96 @@
+# Databricks Asset Bundle (DAB) Configuration
+# Documentation: https://docs.databricks.com/dev-tools/bundles/index.html
+bundle:
+  name: lakehouse-engine
+
+artifacts:
+  default:
+    type: whl
+    build: "python3 -m build --wheel"
+    path: .
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Production/lakehouse_engine
+
+resources:
+  jobs:
+    # 1. Scheduled Micro-Batch Execution (Trigger.AvailableNow)
+    daily_subscriptions_streaming:
+      name: "[${bundle.target}] Subscriptions Lakehouse Streaming"
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?" # Hourly
+        timezone_id: "UTC"
+      job_clusters:
+        - job_cluster_key: "serverless_or_shared_cluster"
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            spark_conf:
+              "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension"
+              "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+            node_type_id: "i3.xlarge"
+            num_workers: 1
+      tasks:
+        - task_key: "run_subscriptions"
+          job_cluster_key: "serverless_or_shared_cluster"
+          python_wheel_task:
+            package_name: "lakehouse_engine"
+            entry_point: "cli"
+            parameters:
+              - "run"
+              - "--config-path"
+              - "configs/examples/subscriptions.yml"
+              - "--env"
+              - "${bundle.target}"
+          libraries:
+            - whl: ./dist/*.whl
+
+    # 2. Parameterized Universal Entity Runner (For on-demand / multi-entity orchestration)
+    lakehouse_entity_runner:
+      name: "[${bundle.target}] Universal Lakehouse Entity Runner"
+      parameters:
+        - name: "config_path"
+          default: "configs/examples/subscriptions.yml"
+      job_clusters:
+        - job_cluster_key: "standard_cluster"
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "i3.xlarge"
+            num_workers: 1
+      tasks:
+        - task_key: "run_entity"
+          job_cluster_key: "standard_cluster"
+          python_wheel_task:
+            package_name: "lakehouse_engine"
+            entry_point: "cli"
+            parameters:
+              - "run"
+              - "--config-path"
+              - "{{job.parameters.config_path}}"
+              - "--env"
+              - "${bundle.target}"
+          libraries:
+            - whl: ./dist/*.whl
+
+    # 3. Autonomous DLQ Diagnostic & Triage Job
+    autonomous_dlq_triage_job:
+      name: "[${bundle.target}] Subscriptions Autonomous DLQ Triage"
+      tasks:
+        - task_key: "triage_dlq"
+          python_wheel_task:
+            package_name: "lakehouse_engine"
+            entry_point: "cli"
+            parameters:
+              - "triage-dlq"
+              - "--config-path"
+              - "configs/examples/subscriptions.yml"
+          libraries:
+            - whl: ./dist/*.whl

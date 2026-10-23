@@ -1,8 +1,10 @@
 import sys
+import json
 import yaml
 import click
 from pathlib import Path
 from lakehouse_engine.models.config import EntityPipelineConfig
+from lakehouse_engine.core.config_loader import load_pipeline_config
 from lakehouse_engine.core.genie import generate_genie_space_documentation
 
 @click.group()
@@ -20,10 +22,7 @@ def run(config_path: str, env: str):
     from pyspark.sql import SparkSession
     from lakehouse_engine.core.streaming import run_pipeline
 
-    with open(config_path, "r") as f:
-        raw_config = yaml.safe_load(f)
-
-    config = EntityPipelineConfig.model_validate(raw_config)
+    config = load_pipeline_config(config_path)
     print(f"Loaded pipeline configuration for entity: {config.entity_name} (Environment: {env})")
 
     spark = (
@@ -49,10 +48,7 @@ def backfill(config_path: str, start_date: str, end_date: str, date_column: str,
     from pyspark.sql import SparkSession
     from lakehouse_engine.core.backfill import run_backfill
 
-    with open(config_path, "r") as f:
-        raw_config = yaml.safe_load(f)
-
-    config = EntityPipelineConfig.model_validate(raw_config)
+    config = load_pipeline_config(config_path)
     print(f"Loaded backfill configuration for: {config.entity_name}")
 
     spark = (
@@ -72,6 +68,48 @@ def backfill(config_path: str, start_date: str, end_date: str, date_column: str,
         reset_checkpoint=reset_checkpoint
     )
 
+@cli.command("export-schema")
+@click.option("--output-file", "-o", default="configs/schema/lakehouse-engine.schema.json", help="Output path for JSON Schema")
+def export_schema(output_file: str):
+    """
+    Exports the JSON Schema for EntityPipelineConfig to enable IDE autocompletion and linting.
+    """
+    schema = EntityPipelineConfig.model_json_schema()
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+    print(f"✨ Successfully exported JSON Schema to: {out_path.resolve()}")
+
+@cli.command("scaffold")
+@click.option("--entity-name", "-n", required=True, help="Entity name (e.g. orders, subscriptions)")
+@click.option("--source-table", "-t", required=True, help="Source Delta table (e.g. raw_landing.orders_events)")
+@click.option("--sample-file", "-s", required=True, help="Path to sample JSON record file")
+@click.option("--output-file", "-o", default=None, help="Path to output YAML file")
+def scaffold(entity_name: str, source_table: str, sample_file: str, output_file: str):
+    """
+    Scaffolds a complete declarative YAML pipeline configuration from a sample record.
+    """
+    from lakehouse_engine.core.scaffold import generate_entity_scaffold_yaml
+
+    sample_path = Path(sample_file)
+    if not sample_path.is_file():
+        raise FileNotFoundError(f"Sample file not found: {sample_path.resolve()}")
+
+    with open(sample_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        record = data[0] if isinstance(data, list) else data
+
+    yaml_content = generate_entity_scaffold_yaml(
+        entity_name=entity_name,
+        source_table=source_table,
+        sample_record=record
+    )
+
+    out_path = Path(output_file) if output_file else Path(f"configs/entities/{entity_name}.yaml")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(yaml_content, encoding="utf-8")
+    print(f"✨ Successfully scaffolded configuration to: {out_path.resolve()}")
+
 @cli.command("export-genie")
 @click.option("--configs-dir", "-d", default="configs/examples", help="Directory containing entity YAML configs")
 @click.option("--output-file", "-o", default="genie_space_instructions.md", help="Output path for Genie Space documentation")
@@ -88,17 +126,16 @@ def export_genie(configs_dir: str, output_file: str):
 
     configs = []
     for yf in yaml_files:
-        with open(yf) as f:
-            data = yaml.safe_load(f)
-            if data and "entity_name" in data:
-                configs.append(EntityPipelineConfig.model_validate(data))
+        try:
+            cfg = load_pipeline_config(yf)
+            configs.append(cfg)
+        except Exception as e:
+            print(f"[WARN] Skipping {yf.name}: {e}")
 
     doc = generate_genie_space_documentation(configs)
     out_path = Path(output_file)
-    out_path.write_text(doc)
+    out_path.write_text(doc, encoding="utf-8")
     print(f"Successfully generated Databricks Genie Space instructions: {out_path.resolve()}")
-
-
 
 @cli.command("triage-dlq")
 @click.option("--config-path", "-c", required=True, help="Path to YAML entity configuration file")
@@ -110,13 +147,9 @@ def triage_dlq(config_path: str, sample_file: str, apply_fix: bool, limit: int):
     Autonomous DLQ Triage: Analyzes quarantined records, discovers schema drift & expectation violations,
     and derives automated self-healing YAML patches.
     """
-    import json
     from lakehouse_engine.core.triage import analyze_quarantined_records, apply_triage_patches_to_yaml
 
-    with open(config_path, "r") as f:
-        raw_config = yaml.safe_load(f)
-
-    config = EntityPipelineConfig.model_validate(raw_config)
+    config = load_pipeline_config(config_path)
 
     records = []
     if sample_file:

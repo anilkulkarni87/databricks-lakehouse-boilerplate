@@ -75,3 +75,13 @@ tasks:
     desc: "Autonomous DLQ Triage: Diagnose quarantined records and suggest self-healing patches (Usage: task dlq:triage CONFIG=configs/examples/subscriptions.yml [SAMPLE=configs/examples/sample_dlq_records.json])"
     cmds:
       - python3 -m lakehouse_engine.cli triage-dlq --config-path {{.CONFIG | default "configs/examples/subscriptions.yml"}} {{if .SAMPLE}}--sample-file {{.SAMPLE}}{{end}}
+
+  schema:export:
+    desc: Export JSON Schema for IDE autocompletion
+    cmds:
+      - python3 -m lakehouse_engine.cli export-schema
+
+  scaffold:
+    desc: "Scaffold a new entity YAML from sample JSON (Usage: task scaffold NAME=orders TABLE=raw_landing.orders SAMPLE=sample.json)"
+    cmds:
+      - python3 -m lakehouse_engine.cli scaffold --entity-name {{.NAME | default "sample_entity"}} --source-table {{.TABLE | default "raw_landing.sample_events"}} --sample-file {{.SAMPLE | default "configs/examples/sample_dlq_records.json"}}
