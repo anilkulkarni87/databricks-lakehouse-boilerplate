@@ -13,6 +13,12 @@ variable "pii_schema_name" {
   description = "Restricted PII domain schema name"
 }
 
+variable "manage_grants" {
+  type        = bool
+  description = "Whether to manage access grants for groups (set to false if groups do not exist yet)"
+  default     = false
+}
+
 variable "analysts_group" {
   type        = string
   description = "Databricks group for standard analytics users"

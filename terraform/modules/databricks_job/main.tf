@@ -11,9 +11,10 @@ resource "databricks_job" "pipeline_job" {
   }
 
   tags = {
-    "Environment" = var.environment
-    "ManagedBy"   = "Terraform"
-    "Framework"   = "LakehouseEngine"
+    "Environment"   = var.environment
+    "ManagedBy"     = "Terraform"
+    "Framework"     = "LakehouseEngine"
+    "CloudProvider" = var.cloud_provider
   }
 
   schedule {
@@ -28,19 +29,33 @@ resource "databricks_job" "pipeline_job" {
       node_type_id   = var.node_type_id
       runtime_engine = "PHOTON"
 
-      # Single-node spot cluster optimization
+      # Single-node cluster optimization
       custom_tags = {
         "ResourceClass" = "SingleNode"
       }
       spark_conf = {
-        "spark.master"                      = "local[*]"
-        "spark.databricks.cluster.profile"  = "singleNode"
+        "spark.master"                                 = "local[*]"
+        "spark.databricks.cluster.profile"             = "singleNode"
         "spark.databricks.delta.optimizeWrites.enabled" = "true"
       }
-      aws_attributes {
-        first_on_demand        = 1
-        zone_id                = "auto"
-        spot_bid_price_percent = var.spot_bid_price_percent
+
+      # Azure Spot Configuration
+      dynamic "azure_attributes" {
+        for_each = var.cloud_provider == "azure" ? [1] : []
+        content {
+          availability    = var.use_spot ? "SPOT_WITH_FALLBACK_AZURE" : "ON_DEMAND_AZURE"
+          first_on_demand = 1
+        }
+      }
+
+      # AWS Spot Configuration
+      dynamic "aws_attributes" {
+        for_each = var.cloud_provider == "aws" ? [1] : []
+        content {
+          first_on_demand        = 1
+          zone_id                = "auto"
+          spot_bid_price_percent = var.spot_bid_price_percent
+        }
       }
     }
   }
@@ -53,9 +68,11 @@ resource "databricks_job" "pipeline_job" {
       whl = var.wheel_file_path
     }
 
-    spark_python_task {
-      python_file = "lakehouse_engine/cli.py"
+    python_wheel_task {
+      package_name = "lakehouse_engine"
+      entry_point  = "cli"
       parameters = [
+        "run",
         "--config-path", var.config_file_path,
         "--env", var.environment
       ]

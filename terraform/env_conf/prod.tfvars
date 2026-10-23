@@ -1,5 +1,7 @@
 databricks_host = "https://adb-9876543210987654.prod.azuredatabricks.net"
 environment     = "prod"
+cloud_provider  = "azure"
 catalog_name    = "prod_lakehouse"
 domain_name     = "ecommerce"
-wheel_file_path = "dbfs:/FileStore/wheels/lakehouse_engine-0.1.0-py3-none-any.whl"
+node_type_id    = "Standard_D8s_v5"
+manage_grants   = true

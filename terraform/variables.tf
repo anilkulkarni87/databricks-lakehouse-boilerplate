@@ -1,6 +1,6 @@
 variable "databricks_host" {
   type        = string
-  description = "Databricks workspace URL"
+  description = "Databricks workspace URL (e.g. https://adb-<id>.<suffix>.azuredatabricks.net)"
 }
 
 variable "environment" {
@@ -9,18 +9,31 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "cloud_provider" {
+  type        = string
+  description = "Cloud provider: 'azure' or 'aws'"
+  default     = "azure"
+}
+
 variable "catalog_name" {
   type        = string
-  description = "Unity Catalog name"
+  description = "Unity Catalog name in Azure Databricks"
 }
 
 variable "domain_name" {
   type        = string
-  description = "Domain name for schemas"
-  default     = "operations"
+  description = "Domain name for schemas (e.g. ecommerce, subscriptions)"
+  default     = "ecommerce"
 }
 
-variable "wheel_file_path" {
+variable "node_type_id" {
   type        = string
-  description = "Path to wheel artifact in DBFS or UC Volume"
+  description = "VM node type (e.g. Standard_D4s_v5 for Azure)"
+  default     = "Standard_D4s_v5"
+}
+
+variable "manage_grants" {
+  type        = bool
+  description = "Whether to manage access grants for groups"
+  default     = false
 }
