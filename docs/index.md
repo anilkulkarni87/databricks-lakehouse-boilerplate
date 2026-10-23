@@ -34,20 +34,20 @@ flowchart TD
         Config["Declarative YAML Config"]
         Transform["Transform & Schema Normalization"]
         PKCheck{"Primary Key Check"}
-        Expectations{"Declarative Expectations\n(fail_batch | quarantine | warn)"}
+        Expectations{"Declarative Expectations<br/>fail_batch | quarantine | warn"}
         Dedup["In-Batch Window Deduplication"]
     end
 
     subgraph Storage ["Curated Delta Lake Layers"]
-        Gold[("Gold Dimension / Fact Table\n- Liquid Clustered\n- Pruned MERGE Upsert\n- Native VARIANT Metadata")]
-        PII[("Segregated PII Dimension\n- Restricted Access\n- xxhash64 Surrogate Key")]
-        DLQ[("Dead-Letter Queue Table\n- Malformed & Quarantined Rows\n- _rescued_payload & _dlq_reason")]
-        Audit[("Centralized Batch Telemetry\n- Execution Duration & Row Counts\n- Error Messages")]
+        Gold[("Gold Dimension / Fact Table<br/>- Liquid Clustered<br/>- Pruned MERGE Upsert<br/>- Native VARIANT Metadata")]
+        PII[("Segregated PII Dimension<br/>- Restricted Access<br/>- xxhash64 Surrogate Key")]
+        DLQ[("Dead-Letter Queue Table<br/>- Malformed & Quarantined Rows<br/>- _rescued_payload & _dlq_reason")]
+        Audit[("Centralized Batch Telemetry<br/>- Execution Duration & Row Counts<br/>- Error Messages")]
     end
 
     subgraph SelfHealing ["Autonomous Operations"]
-        Triage["Autonomous DLQ Triage CLI\n(lakehouse-engine triage-dlq)"]
-        Genie["Databricks Genie AI Space\n(Auto-generated System Prompt & Constraints)"]
+        Triage["Autonomous DLQ Triage CLI<br/>(lakehouse-engine triage-dlq)"]
+        Genie["Databricks Genie AI Space<br/>(Auto-generated System Prompt & Constraints)"]
     end
 
     Src --> Transform
