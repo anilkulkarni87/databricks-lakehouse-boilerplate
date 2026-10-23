@@ -1,0 +1,35 @@
+[
+  {
+    "_dlq_reason": "MISSING_OR_EMPTY_KEY:subscription_id",
+    "_dlq_timestamp": "2026-10-22T14:30:00Z",
+    "_rescued_payload": {
+      "sub_id": "sub_drift_9901",
+      "plan": {"tier": "Enterprise", "amountCents": 19900},
+      "status": "ACTIVE",
+      "startedOn": "2026-10-22T10:00:00Z",
+      "subscriberId": "cust_881"
+    }
+  },
+  {
+    "_dlq_reason": "MISSING_OR_EMPTY_KEY:subscription_id",
+    "_dlq_timestamp": "2026-10-22T14:31:00Z",
+    "_rescued_payload": {
+      "sub_id": "sub_drift_9902",
+      "plan": {"tier": "Enterprise", "amountCents": 19900},
+      "status": "ACTIVE",
+      "startedOn": "2026-10-22T10:05:00Z",
+      "subscriberId": "cust_882"
+    }
+  },
+  {
+    "_dlq_reason": "FAILED_EXPECTATION:valid_subscription_status (status IN ('ACTIVE', 'PAST_DUE', 'CANCELLED', 'PAUSED'))",
+    "_dlq_timestamp": "2026-10-22T14:32:00Z",
+    "_rescued_payload": {
+      "subscriptionId": "sub_1099",
+      "plan": {"tier": "Pro", "amountCents": 4900},
+      "status": "PENDING_REVIEW",
+      "startedOn": "2026-10-22T11:00:00Z",
+      "subscriberId": "cust_901"
+    }
+  }
+]

@@ -1,13 +1,22 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class FieldDefinition(BaseModel):
     name: str = Field(..., description="Target column name")
     type: str = Field(..., description="Spark SQL data type")
     expr: str = Field(..., description="SQL transformation expression")
     description: Optional[str] = Field(None, description="Semantic description for Unity Catalog / Genie Text-to-SQL")
+    comment: Optional[str] = Field(None, description="Alternative alias for column description")
     is_primary_key: bool = Field(False, description="Whether this column is part of the primary key")
     mask_policy: Optional[str] = Field(None, description="Unity Catalog Column Mask UDF name")
+
+    @model_validator(mode="after")
+    def sync_comment_and_description(self):
+        if not self.description and self.comment:
+            self.description = self.comment
+        elif not self.comment and self.description:
+            self.comment = self.description
+        return self
 
 class ForeignKeyReference(BaseModel):
     column: str = Field(..., description="Foreign key column name in this table")
@@ -21,12 +30,20 @@ class MetricDefinition(BaseModel):
     description: str = Field(..., description="Business definition and guidance for Genie queries")
     synonyms: List[str] = Field(default_factory=list, description="Common alternative names used in natural language")
 
+class ExpectationConfig(BaseModel):
+    name: str = Field(..., description="Data quality check name")
+    expr: str = Field(..., description="Boolean SQL validation expression that must evaluate to TRUE")
+    action: str = Field("quarantine", description="Action on failure: 'quarantine' (route to DLQ), 'warn' (log), 'fail_batch' (halt)")
+    description: Optional[str] = Field(None, description="Explanation of why this rule exists")
+
 class SourceConfig(BaseModel):
     catalog: str
     schema_name: str = Field(..., alias="schema")
     table: str
     stream_filter_field: Optional[str] = None
     stream_filter_value: Optional[str] = None
+    payload_column: str = Field("payload", description="Name of the semi-structured payload column in source")
+    payload_type: str = Field("variant", description="Encoding: 'variant' (Databricks native binary VARIANT), 'json_string', or 'struct'")
 
     @property
     def fqdn(self) -> str:
@@ -36,12 +53,14 @@ class RuntimeConfig(BaseModel):
     trigger_type: str = "AvailableNow"
     max_mbytes_per_trigger: int = 2000
     checkpoint_location: str
+    audit_table: Optional[str] = Field(None, description="Centralized operational telemetry audit table FQDN")
 
 class TargetTableConfig(BaseModel):
     catalog: str
     schema_name: str = Field(..., alias="schema")
     table: str
     table_comment: Optional[str] = Field(None, description="Semantic description of the table for catalog & Genie")
+    comment: Optional[str] = Field(None, description="Alternative alias for table_comment")
     table_type: str = Field("dimension", description="'fact' or 'dimension' for Kimball modeling")
     unique_keys: List[str]
     cluster_by: List[str] = []
@@ -51,9 +70,22 @@ class TargetTableConfig(BaseModel):
     foreign_keys: List[ForeignKeyReference] = []
     metrics: List[MetricDefinition] = []
 
+    # Phase 1: DLQ & Rescued Data
+    enable_dlq: bool = Field(True, description="Enable automated Dead-Letter Queue quarantine for malformed records")
+    dlq_table: Optional[str] = Field(None, description="Custom DLQ table FQDN. Defaults to <target_table>_dlq")
+    track_rescued_data: bool = Field(True, description="Preserves raw unmapped payload in _rescued_payload")
+    store_rescued_as_variant: bool = Field(True, description="Stores _rescued_payload as Databricks native VARIANT")
+
+    # Phase 2: Data Quality Expectations
+    expectations: List[ExpectationConfig] = Field(default_factory=list, description="Declarative data quality rules")
+
     @property
     def fqdn(self) -> str:
         return f"{self.catalog}.{self.schema_name}.{self.table}" if self.catalog else f"{self.schema_name}.{self.table}"
+
+    @property
+    def dlq_fqdn(self) -> str:
+        return self.dlq_table or f"{self.fqdn}_dlq"
 
 class PiiSplitConfig(BaseModel):
     name: str

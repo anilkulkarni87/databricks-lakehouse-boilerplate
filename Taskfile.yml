@@ -1,5 +1,8 @@
 version: '3'
 
+env:
+  PYTHONPATH: src
+
 tasks:
   install:
     desc: Install Python dependencies
@@ -18,9 +21,11 @@ tasks:
       - ruff format src/ tests/
 
   test:
-    desc: Run unit tests with pytest
+    desc: "Run unit tests across all engine domains"
+    env:
+      PYTHONPATH: src
     cmds:
-      - pytest tests/ -v
+      - python3 -m unittest discover -s tests -p "test_*.py" -v
 
   build:
     desc: Build Python wheel artifact for Databricks deployment
@@ -36,7 +41,7 @@ tasks:
       - terraform init
 
   tf:plan:
-    desc: Terraform plan (Usage: task tf:plan ENV=dev)
+    desc: "Terraform plan (Usage: task tf:plan ENV=dev)"
     dir: terraform
     vars:
       ENV: '{{.ENV | default "dev"}}'
@@ -44,7 +49,7 @@ tasks:
       - terraform plan -var-file="env_conf/{{.ENV}}.tfvars"
 
   tf:apply:
-    desc: Terraform apply (Usage: task tf:apply ENV=dev)
+    desc: "Terraform apply (Usage: task tf:apply ENV=dev)"
     dir: terraform
     vars:
       ENV: '{{.ENV | default "dev"}}'
@@ -55,3 +60,18 @@ tasks:
     desc: Export Databricks Genie Space instructions and Unity Catalog constraint DDLs
     cmds:
       - python3 -m lakehouse_engine.cli export-genie --configs-dir configs/examples --output-file genie_space_instructions.md
+
+  backfill:
+    desc: "Run historical batch backfill (Usage: task backfill CONFIG=configs/examples/subscriptions.yml START=2026-01-01 END=2026-03-31)"
+    cmds:
+      - python3 -m lakehouse_engine.cli backfill --config-path {{.CONFIG}} {{if .START}}--start-date {{.START}}{{end}} {{if .END}}--end-date {{.END}}{{end}}
+
+  mcp:serve:
+    desc: Start Model Context Protocol (MCP) server for AI coding and data modeling agents
+    cmds:
+      - python3 -m lakehouse_engine.cli mcp-serve
+
+  dlq:triage:
+    desc: "Autonomous DLQ Triage: Diagnose quarantined records and suggest self-healing patches (Usage: task dlq:triage CONFIG=configs/examples/subscriptions.yml [SAMPLE=configs/examples/sample_dlq_records.json])"
+    cmds:
+      - python3 -m lakehouse_engine.cli triage-dlq --config-path {{.CONFIG | default "configs/examples/subscriptions.yml"}} {{if .SAMPLE}}--sample-file {{.SAMPLE}}{{end}}

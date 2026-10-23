@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Any
 from pyspark.sql import DataFrame, functions as F
 from delta.tables import DeltaTable
 from lakehouse_engine.models.config import FieldDefinition
@@ -32,7 +32,6 @@ def sync_catalog_comments(
     Syncs declarative table and column descriptions into Unity Catalog / Metastore.
     Enables Text-to-SQL AI Agents (e.g. Databricks Genie) to accurately understand schema semantics.
     """
-    # 1. Sync Table Comment
     if table_comment:
         escaped_tbl_comment = table_comment.replace("'", "\\'")
         try:
@@ -41,7 +40,6 @@ def sync_catalog_comments(
         except Exception as e:
             logger.warning(f"Could not update table comment on {table_fqdn}: {e}")
 
-    # 2. Sync Column Comments
     for field in fields:
         if field.description:
             escaped_col_comment = field.description.replace("'", "\\'")
@@ -70,7 +68,6 @@ def ensure_delta_table(
             writer = writer.clusterBy(*cluster_by)
         writer.saveAsTable(table_fqdn)
 
-    # Sync table and column comments into Unity Catalog metadata
     if fields:
         sync_catalog_comments(spark, table_fqdn, table_comment, fields)
 
