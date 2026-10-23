@@ -150,6 +150,37 @@ flowchart TD
 
 ---
 
+
+---
+
+## 🚀 Getting Started & Local Environment Setup
+
+### 1. Prerequisites
+- **Python 3.10+**
+- *(Optional)* **[Task](https://taskfile.dev/)** runner (`brew install go-task`)
+
+### 2. Setup Virtual Environment
+```bash
+# 1. Clone repository and navigate inside
+cd databricks-lakehouse-boilerplate
+
+# 2. Create and activate a Python virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies in editable mode (or run: task install)
+pip install -e ".[dev]"
+```
+
+### 3. Run Unit Tests (16 Tests across all domains, ~0.08s execution)
+```bash
+# Option A: Via Taskfile (automatically resolves PYTHONPATH)
+task test
+
+# Option B: Direct Python standard library (zero external dependencies required)
+python3 -m unittest discover -s tests -p "test_*.py" -v
+```
+
 ## ⚡ Quickstart: Adding a New Entity in 3 Minutes
 
 ### Step 1: Create Entity Config

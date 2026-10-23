@@ -1,5 +1,8 @@
 version: '3'
 
+env:
+  PYTHONPATH: src
+
 tasks:
   install:
     desc: Install Python dependencies
@@ -18,7 +21,9 @@ tasks:
       - ruff format src/ tests/
 
   test:
-    desc: Run unit tests with pytest
+    desc: "Run unit tests across all engine domains"
+    env:
+      PYTHONPATH: src
     cmds:
       - python3 -m unittest discover -s tests -p "test_*.py" -v
 
