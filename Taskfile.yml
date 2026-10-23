@@ -36,7 +36,7 @@ tasks:
       - terraform init
 
   tf:plan:
-    desc: Terraform plan (Usage: task tf:plan ENV=dev)
+    desc: "Terraform plan (Usage: task tf:plan ENV=dev)"
     dir: terraform
     vars:
       ENV: '{{.ENV | default "dev"}}'
@@ -44,7 +44,7 @@ tasks:
       - terraform plan -var-file="env_conf/{{.ENV}}.tfvars"
 
   tf:apply:
-    desc: Terraform apply (Usage: task tf:apply ENV=dev)
+    desc: "Terraform apply (Usage: task tf:apply ENV=dev)"
     dir: terraform
     vars:
       ENV: '{{.ENV | default "dev"}}'
