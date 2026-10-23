@@ -1,0 +1,229 @@
+# Azure Databricks Production Guide
+
+**[About](index.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
+
+---
+
+This runbook provides the **bulletproof, end-to-end production sequence** for adopting **Lakehouse Engine** on **Azure Databricks** with Unity Catalog, Terraform infrastructure-as-code, Azure Spot cost optimization, and automated CI/CD deployment.
+
+---
+
+## 🏛️ Azure Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph AzureCloud ["Microsoft Azure Subscription"]
+        subgraph ADBWorkspace ["Azure Databricks Workspace (E2 Architecture)"]
+            UC[("Unity Catalog Metastore\n- ADLS Gen2 Managed Storage")]
+            
+            subgraph Governance ["Unity Catalog Governance"]
+                StdSchema["Analytics Schema\n(e.g., dev_lakehouse.ecommerce)"]
+                PIISchema["Restricted PII Schema\n(e.g., dev_lakehouse.ecommerce_pii)"]
+                Volumes["Managed UC Volumes\n- /library (Wheel artifacts)\n- /configs (Entity YAMLs)\n- /checkpoints (Delta offsets)"]
+            end
+
+            subgraph Compute ["Photon Accelerated Compute"]
+                JobCluster["Single-Node Azure Spot Worker\n- Standard_D4s_v5 (Photon)\n- SPOT_WITH_FALLBACK_AZURE"]
+            end
+        end
+
+        subgraph IaC ["Terraform Orchestration"]
+            TFModules["terraform/\n- modules/unity_governance\n- modules/databricks_job\n- env_conf/dev.tfvars & prod.tfvars"]
+        end
+    end
+
+    IaC -->|"Provisions Schemas, Volumes & Jobs"| ADBWorkspace
+    Volumes -->|"Supplies Wheel & Config"| Compute
+    Compute -->|"Executes Pruned MERGE"| StdSchema
+    Compute -->|"Segregates PII via xxhash64"| PIISchema
+```
+
+---
+
+## 📋 Prerequisites
+
+1. **Azure Databricks Workspace** with **Unity Catalog** enabled.
+2. **Target Unity Catalog**: (e.g., `main`, `dev_lakehouse`, or `prod_lakehouse`) with `CREATE SCHEMA` permissions.
+3. **Local Tools**:
+   * [Task](https://taskfile.dev/) (`brew install go-task`)
+   * [Terraform](https://www.terraform.io/) `>= 1.5.0`
+   * [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html) `>= 0.200.0`
+   * Python 3.10 or 3.11
+
+---
+
+## 🚀 The Bulletproof 7-Step Adoption Sequence
+
+### Step 1: Switch to Azure Terraform Branch & Build Artifacts
+Switch to the Azure-specific Terraform branch and build the lightweight wheel:
+```bash
+# 1. Switch to the dedicated Azure Terraform branch
+git checkout feature/azure-databricks-terraform
+
+# 2. Build the production wheel artifact
+task build
+# Generates: dist/lakehouse_engine-0.1.0-py3-none-any.whl (41 KB)
+```
+
+---
+
+### Step 2: Configure Workspace Authentication
+Export credentials in your deployment terminal:
+```bash
+# Your Azure Databricks workspace URL
+export DATABRICKS_HOST="https://adb-1234567890123456.dev.azuredatabricks.net"
+
+# Option A: Personal Access Token (for initial sandbox testing)
+export DATABRICKS_TOKEN="dapi1234567890abcdef..."
+
+# Option B: Azure Service Principal (Enterprise CI/CD Standard)
+export ARM_CLIENT_ID="<azure-service-principal-client-id>"
+export ARM_CLIENT_SECRET="<azure-service-principal-client-secret>"
+export ARM_TENANT_ID="<azure-active-directory-tenant-id>"
+```
+
+---
+
+### Step 3: Configure Environment Variables in `dev.tfvars`
+Edit [`terraform/env_conf/dev.tfvars`](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate/blob/feature/azure-databricks-terraform/terraform/env_conf/dev.tfvars):
+```hcl
+databricks_host = "https://adb-1234567890123456.dev.azuredatabricks.net"
+environment     = "dev"
+cloud_provider  = "azure"
+catalog_name    = "dev_lakehouse"             # Your Azure UC Catalog
+domain_name     = "ecommerce"                 # Target Schema Domain
+node_type_id    = "Standard_D4s_v5"           # Azure Photon-capable VM
+manage_grants   = false                       # Set true once user groups exist
+```
+
+---
+
+### Step 4: Provision Infrastructure with Terraform
+Initialize and apply the Terraform configuration:
+```bash
+cd terraform
+
+# 1. Initialize Databricks provider
+terraform init
+
+# 2. Preview resources
+terraform plan -var-file="env_conf/dev.tfvars"
+
+# 3. Apply infrastructure
+terraform apply -var-file="env_conf/dev.tfvars" -auto-approve
+```
+
+#### What Terraform Provisions in Azure Databricks:
+
+| Resource | Name / Location | Purpose |
+| :--- | :--- | :--- |
+| **Standard Schema** | `dev_lakehouse.ecommerce` | Curated non-PII Gold dimensions and facts. |
+| **PII Schema** | `dev_lakehouse.ecommerce_pii` | Restricted compliance layer with column masking. |
+| **Library Volume** | `/Volumes/dev_lakehouse/ecommerce/library` | Staging location for the engine Python wheel. |
+| **Configs Volume** | `/Volumes/dev_lakehouse/ecommerce/configs` | Staging location for Git-versioned entity YAMLs. |
+| **Checkpoints Volume** | `/Volumes/dev_lakehouse/ecommerce/checkpoints` | Streaming checkpoint offsets. |
+| **Masking Function** | `dev_lakehouse.ecommerce_pii.mask_email` | Dynamic SQL UDF masking emails for non-privileged users. |
+| **Workflow Job** | `lakehouse-subscriptions-dev` | Photon single-node Azure Spot job executing `python_wheel_task`. |
+
+---
+
+### Step 5: Upload Artifacts to Unity Catalog Volumes
+Sync the built wheel and entity YAML definition to the provisioned volumes:
+```bash
+# Return to repository root
+cd ..
+
+# 1. Upload Wheel Artifact
+databricks fs cp dist/lakehouse_engine-0.1.0-py3-none-any.whl \
+  dbfs:/Volumes/dev_lakehouse/ecommerce/library/lakehouse_engine-0.1.0-py3-none-any.whl
+
+# 2. Upload Entity YAML Config
+databricks fs cp configs/examples/subscriptions.yml \
+  dbfs:/Volumes/dev_lakehouse/ecommerce/configs/subscriptions.yml
+```
+
+---
+
+### Step 6: Seed Silver Landing Table & Execute Job
+In Databricks SQL or a scratch notebook, seed the landing table:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS dev_lakehouse.raw_landing;
+
+CREATE TABLE IF NOT EXISTS dev_lakehouse.raw_landing.silver_subscription_events (
+  subscriptionId STRING,
+  plan STRUCT<tier: STRING, billingInterval: STRING, amountCents: BIGINT>,
+  currency STRING,
+  status STRING,
+  isTrial BOOLEAN,
+  autoRenew BOOLEAN,
+  renewalCount INT,
+  startedOn TIMESTAMP,
+  updatedOn TIMESTAMP,
+  subscriberId STRING,
+  subscriber STRUCT<email: STRING, contactName: STRING, phone: STRING, taxIdentifier: STRING, country: STRING, postalCode: STRING>,
+  raw_device_headers STRING
+) USING DELTA;
+
+INSERT INTO dev_lakehouse.raw_landing.silver_subscription_events VALUES (
+  'sub_1001',
+  named_struct('tier', 'Pro', 'billingInterval', 'monthly', 'amountCents', 4900),
+  'USD',
+  'ACTIVE',
+  false,
+  true,
+  3,
+  current_timestamp(),
+  current_timestamp(),
+  'cust_901',
+  named_struct('email', 'alex.miller@example.com', 'contactName', 'Alex Miller', 'phone', '+1-555-0123', 'taxIdentifier', 'US-9912', 'country', 'US', 'postalCode', '98101'),
+  '{"user_agent": "Mozilla/5.0 (Azure-Client)", "ip": "10.0.0.1", "dark_mode": true}'
+);
+```
+
+#### Trigger the Terraform-Managed Job:
+1. Navigate to **Workflows** $\rightarrow$ **Jobs** in Azure Databricks.
+2. Select **`lakehouse-subscriptions-dev`** $\rightarrow$ click **Run Now**.
+3. Inspect Job Run Logs:
+   * **Clean Ingestion**: Merges into `dev_lakehouse.ecommerce.dim_subscriptions`.
+   * **PII Isolation**: Customer email routes to `dev_lakehouse.ecommerce_pii.dim_subscriber_profiles_pii`.
+   * **Telemetry**: Micro-batch latency and row counts logged to `dev_lakehouse.ecommerce.pipeline_batch_audit`.
+
+---
+
+### Step 7: Onboarding New Pipeline Jobs (Day-2 Operations)
+
+When your team needs to deploy new pipelines (e.g. `orders`, `clickstream`), use one of two enterprise patterns:
+
+#### Pattern A: Dynamic Parameterization (Fastest — Zero Terraform Changes)
+1. Commit `configs/entities/orders.yaml` to Git.
+2. CI/CD syncs the YAML to `/Volumes/dev_lakehouse/ecommerce/configs/orders.yaml`.
+3. Trigger the shared job passing `--config-path /Volumes/.../orders.yaml`.
+*Onboarding Time*: Under 2 minutes.
+
+#### Pattern B: Dedicated Terraform Job (Isolated Compute & Custom Crons)
+Add a new module block in `terraform/main.tf`:
+```hcl
+module "orders_pipeline_job" {
+  source           = "./modules/databricks_job"
+  job_name         = "lakehouse-orders"
+  environment      = var.environment
+  cloud_provider   = var.cloud_provider
+  node_type_id     = var.node_type_id
+  wheel_file_path  = "/Volumes/${var.catalog_name}/${var.domain_name}/library/lakehouse_engine-0.1.0-py3-none-any.whl"
+  config_file_path = "/Volumes/${var.catalog_name}/${var.domain_name}/configs/orders.yaml"
+  schedule_cron    = "0 30 * * * ?" # Runs at :30 past every hour
+}
+```
+Run `terraform apply -var-file="env_conf/prod.tfvars"` to provision the new scheduled job.
+
+---
+
+## 🛡️ Production Best Practices on Azure
+
+1. **Always Use Photon & Azure Spot**:
+   * The `databricks_job` module sets `runtime_engine = "PHOTON"` and `availability = "SPOT_WITH_FALLBACK_AZURE"`. This reduces Azure compute bills by up to **70%** compared to on-demand VMs while preventing job halts if spot capacity is briefly constrained.
+2. **Never Use DBFS Root Paths**:
+   * Azure Databricks workspaces with modern Unity Catalog enforce `DBFS_DISABLED`. Always use managed Unity Catalog Volumes (`/Volumes/<catalog>/<schema>/<volume>/...`) for checkpoints and libraries.
+3. **Automate Quality Gates in CI**:
+   * Run `task test` and schema validation in your Azure DevOps or GitHub Actions pipeline before applying Terraform in production.
