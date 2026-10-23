@@ -114,6 +114,7 @@ terraform apply -var-file="env_conf/dev.tfvars" -auto-approve
 ```
 
 #### What Terraform Provisions in Azure Databricks:
+
 | Resource | Name / Location | Purpose |
 | :--- | :--- | :--- |
 | **Standard Schema** | `dev_lakehouse.ecommerce` | Curated non-PII Gold dimensions and facts. |
