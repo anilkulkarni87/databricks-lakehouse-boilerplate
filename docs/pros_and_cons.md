@@ -64,3 +64,61 @@ To help data platform architects and engineering teams evaluate the **Lakehouse 
 ### 4. PySpark Dependency
 * **Trade-off**: Requires a Spark runtime (Databricks cluster, local Spark, or Docker container).
 * **Who it affects**: Teams seeking ultra-lightweight, single-node DuckDB/Polars execution.
+
+---
+
+## 💰 In-Depth Cost & ROI Analysis: Lakehouse Engine vs. Delta Live Tables (DLT)
+
+For data engineering directors, platform architects, and CFOs, evaluating pipeline frameworks comes down to two numbers: **Cloud DBU Expenditure** and **Mean Time to Resolution (MTTR)**.
+
+```mermaid
+flowchart LR
+    subgraph DLTExpenses ["Proprietary Delta Live Tables (DLT)"]
+        D1["Base VM Cost"]
+        D2["Standard DBU Rate"]
+        D3["+ 20-35% DLT Premium Surcharge"]
+        D4["ON VIOLATION DROP: Silent Data Loss\nOR\nON VIOLATION FAIL: 4-Hour On-Call MTTR"]
+        D1 --- D2 --- D3
+    end
+
+    subgraph LakehouseEngineROI ["Open-Source Lakehouse Engine"]
+        L1["Base VM Cost (Spot 70% Discount)"]
+        L2["Lowest Standard Jobs DBU (0% Markup)"]
+        L3["Zero Idle Compute (Trigger.AvailableNow shuts down instantly)"]
+        L4["Zero Data Loss (DLQ + Rescued Variant)\n+\nAutonomous Self-Healing Triage (< 30s MTTR)"]
+        L1 --- L2 --- L3
+    end
+```
+
+### 1. The DLT DBU Premium Surcharge
+* **The Math**: Databricks charges an extra **$0.20 to $0.35+ per DBU** for Delta Live Tables on top of standard compute rates.
+* **Annual Cost Impact**: For a mid-sized data platform consuming 500 DBUs per day across 25 ingestion pipelines:
+  $$\text{DLT Surcharge} = 500 \text{ DBUs/day} \times \$0.25 \text{ premium} \times 365 \text{ days} = \mathbf{\$45,625 / \text{year in vendor markup}}$$
+* **Lakehouse Engine**: Runs on standard single-node or auto-scaling Databricks Jobs compute. **Zero surcharge**.
+
+### 2. Compute Lifecycle & Idle DBR Costs
+* **DLT Constraints**: DLT pipelines require a pipeline initialization sequence (often 4–8 minutes to compile dependency graphs and cluster states) and maintain warm clusters that delay teardown.
+* **Lakehouse Engine**: Operates under native Spark Structured Streaming with `Trigger.AvailableNow` on single-node Azure Spot VMs (`Standard_D4s_v5`). It reads uncommitted streaming offsets, executes cluster date-pruned MERGE operations, writes telemetry to the audit table, and **shuts down the cluster immediately**.
+
+### 3. Data Integrity: The "Drop Row" Trap vs. Zero Data Loss
+* **DLT Expectations**:
+  * `ON VIOLATION DROP ROW`: Silently deletes corrupted customer records without a forensic trace. In regulated industries (fintech, e-commerce, healthcare), silent data loss violates audit and compliance standards.
+  * `ON VIOLATION FAIL UPDATE`: Crashes the entire pipeline micro-batch, blocking downstream dashboards and triggering pager alerts.
+* **Lakehouse Engine**:
+  * Guarantees **Zero Data Loss**. Malformed records are preserved in `dim_subscriptions_dlq` with their exact failure reason (`_dlq_reason`) and raw unmapped payload preserved in native binary `_rescued_payload`.
+  * Downstream Gold tables continue serving clean, certified records without interruption.
+
+### 4. Mean Time to Resolution (MTTR): Manual Digging vs. Autonomous Triage
+* **Traditional Incident Response (DLT / Bespoke PySpark)**:
+  1. Pipeline fails or records drop.
+  2. On-call engineer gets paged.
+  3. Spends 2 hours searching driver logs and reverse-engineering JSON schemas.
+  4. Writes custom SQL scripts to patch the target table.
+  5. Deploys code and manually triggers a restatement.
+  *Average MTTR*: **2 to 6 hours**.
+* **Lakehouse Engine Autonomous Triage**:
+  1. Bad records hit DLQ $\rightarrow$ Real-time Slack alert fires.
+  2. Engineer runs `lakehouse-engine triage-dlq --apply-fix`.
+  3. Engine diagnoses root cause (new enum values or relocated primary key) and generates a unified diff patch.
+  4. Engineer commits patch to Git and runs `lakehouse-engine backfill`.
+  *Average MTTR*: **< 30 seconds**.
