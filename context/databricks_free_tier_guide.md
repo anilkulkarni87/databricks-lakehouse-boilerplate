@@ -61,6 +61,7 @@ print(f"✅ Using active Databricks Catalog: '{active_catalog}'")
 spark.sql(f"USE CATALOG {active_catalog}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {active_catalog}.raw_landing")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {active_catalog}.default")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {active_catalog}.default.checkpoints")
 
 # COMMAND ----------
 # 2. Setup Sample Raw Landing Table with JSON & Nested Structs
@@ -118,7 +119,7 @@ source:
 runtime:
   trigger_type: "AvailableNow"
   max_mbytes_per_trigger: 500
-  checkpoint_location: "dbfs:/tmp/checkpoints/subscriptions"
+  checkpoint_location: f"/Volumes/{active_catalog}/default/checkpoints/subscriptions"
 
 gold:
   catalog: "{active_catalog}"
