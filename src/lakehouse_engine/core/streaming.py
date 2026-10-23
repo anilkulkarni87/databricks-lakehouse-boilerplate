@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
     register_helpers(spark)
 
+    # Automatically distribute package to streaming workers (Databricks Connect & classic Spark)
+    try:
+        import lakehouse_engine
+        import inspect
+        pkg_file = inspect.getfile(lakehouse_engine)
+        if hasattr(spark, "sparkContext"):
+            spark.sparkContext.addPyFile(pkg_file)
+        elif hasattr(spark, "addArtifacts"):
+            spark.addArtifacts(pkg_file, pyfile=True)
+    except Exception as e:
+        logger.debug(f"Auto-distribution of library to workers skipped: {e}")
+
     # 1. Read source stream
     stream_reader = (
         spark.readStream.format("delta")
