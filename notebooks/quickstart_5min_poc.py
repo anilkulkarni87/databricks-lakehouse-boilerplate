@@ -105,8 +105,8 @@ guardrails:
 # Data Contract SLA Thresholds
 contract:
   schema_drift_policy: "fail_on_incompatible"
-  max_quarantine_rate_percent: 75.0   # POC threshold allowing DLQ inspection in Cell 6
-  quarantine_action: "fail_batch"
+  max_quarantine_rate_percent: 75.0   # SLA threshold: breach if quarantine rate > 75%
+  quarantine_action: "warn"           # 'warn' in POC allows DLQ inspection; use 'fail_batch' in prod for strict SLA halts
   enforce_not_null_pk: true
 
 source:
@@ -259,7 +259,39 @@ display(spark.table(f"{active_catalog}.default.pipeline_batch_audit"))
 
 # COMMAND ----------
 spark.sql(f"""
-INSERT INTO {active_catalog}.raw_landing.silver_subscription_events VALUES (
+INSERT INTO {active_catalog}.raw_landing.silver_subscription_events VALUES 
+-- Valid Record 1 (merges successfully into Gold)
+(
+  'sub_0006',
+  named_struct('tier', 'Enterprise', 'billingInterval', 'annual', 'amountCents', 120000),
+  'USD',
+  'ACTIVE',
+  false,
+  false,
+  0,
+  current_timestamp(),
+  current_timestamp(),
+  'cust_106',
+  named_struct('email', 'valid1@example.com', 'contactName', 'Valid User 1', 'phone', '+1-555-0106', 'taxIdentifier', 'US-106', 'country', 'US', 'postalCode', '94105'),
+  '{{\"user_agent\": \"Desktop\", \"dark_mode\": false}}'
+),
+-- Valid Record 2 (merges successfully into Gold)
+(
+  'sub_0007',
+  named_struct('tier', 'Pro', 'billingInterval', 'monthly', 'amountCents', 4900),
+  'USD',
+  'ACTIVE',
+  false,
+  false,
+  0,
+  current_timestamp(),
+  current_timestamp(),
+  'cust_107',
+  named_struct('email', 'valid2@example.com', 'contactName', 'Valid User 2', 'phone', '+1-555-0107', 'taxIdentifier', 'US-107', 'country', 'US', 'postalCode', '94105'),
+  '{{\"user_agent\": \"Desktop\", \"dark_mode\": true}}'
+),
+-- Malformed Record A: Violates valid_status expectation ('PENDING_REVIEW') -> Routed to DLQ
+(
   'sub_9999',
   named_struct('tier', 'Pro', 'billingInterval', 'monthly', 'amountCents', 4900),
   'USD',
@@ -273,6 +305,7 @@ INSERT INTO {active_catalog}.raw_landing.silver_subscription_events VALUES (
   named_struct('email', 'drift@example.com', 'contactName', 'Drift User', 'phone', '+1-555-9999', 'taxIdentifier', 'US-99', 'country', 'US', 'postalCode', '10001'),
   '{{\"user_agent\": \"Mobile-App\", \"dark_mode\": false}}'
 ),
+-- Malformed Record B: Missing Primary Key (NULL) -> Routed to DLQ
 (
   NULL,              -- Missing primary key!
   named_struct('tier', 'Starter', 'billingInterval', 'monthly', 'amountCents', 1900),
