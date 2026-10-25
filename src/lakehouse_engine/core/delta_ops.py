@@ -1,7 +1,12 @@
 import logging
 from typing import List, Optional, Tuple, Dict, Any
-from pyspark.sql import DataFrame, functions as F
-from delta.tables import DeltaTable
+try:
+    from pyspark.sql import DataFrame, functions as F
+    from delta.tables import DeltaTable
+except ImportError:
+    DataFrame = Any  # type: ignore
+    F = None         # type: ignore
+    DeltaTable = None # type: ignore
 from lakehouse_engine.models.config import FieldDefinition
 
 logger = logging.getLogger(__name__)
@@ -49,16 +54,36 @@ def sync_catalog_comments(
             except Exception as e:
                 logger.warning(f"Could not update column comment on {table_fqdn}.{field.name}: {e}")
 
+def apply_unity_catalog_tags(
+    spark,
+    table_fqdn: str,
+    tags: Optional[Dict[str, str]]
+) -> None:
+    """
+    Applies declarative governance and compliance tags to the table in Unity Catalog.
+    """
+    if not tags:
+        return
+    tag_assignments = ", ".join([f"'{k}' = '{v}'" for k, v in tags.items()])
+    try:
+        spark.sql(f"ALTER TABLE {table_fqdn} SET TAGS ({tag_assignments})")
+        logger.info(f"Applied Unity Catalog tags to {table_fqdn}: {tags}")
+    except Exception as e:
+        logger.debug(f"Could not apply Unity Catalog tags on {table_fqdn}: {e}")
+
 def ensure_delta_table(
     spark,
     table_fqdn: str,
     df: DataFrame,
     cluster_by: List[str],
     table_comment: Optional[str] = None,
-    fields: Optional[List[FieldDefinition]] = None
+    fields: Optional[List[FieldDefinition]] = None,
+    tags: Optional[Dict[str, str]] = None,
+    auto_optimize: bool = True
 ) -> None:
     """
-    Auto-provisions the Delta table with Databricks Liquid Clustering and syncs catalog descriptions.
+    Auto-provisions the Delta table with Databricks Liquid Clustering, auto-compaction properties,
+    and syncs Unity Catalog metadata (comments and tags).
     """
     table_is_new = not spark.catalog.tableExists(table_fqdn)
     if table_is_new:
@@ -68,8 +93,23 @@ def ensure_delta_table(
             writer = writer.clusterBy(*cluster_by)
         writer.saveAsTable(table_fqdn)
 
+        if auto_optimize:
+            try:
+                spark.sql(f"""
+                    ALTER TABLE {table_fqdn} SET TBLPROPERTIES (
+                        'delta.autoOptimize.optimizeWrite' = 'true',
+                        'delta.autoOptimize.autoCompact' = 'true'
+                    )
+                """)
+                logger.info(f"Enabled Delta auto-compaction and optimized writes on {table_fqdn}")
+            except Exception as e:
+                logger.debug(f"Could not set auto-optimize properties on {table_fqdn}: {e}")
+
     if fields:
         sync_catalog_comments(spark, table_fqdn, table_comment, fields)
+
+    if tags:
+        apply_unity_catalog_tags(spark, table_fqdn, tags)
 
 def merge_batch_pruned(
     spark,

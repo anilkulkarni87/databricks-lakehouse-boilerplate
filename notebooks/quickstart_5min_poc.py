@@ -11,6 +11,8 @@
 # MAGIC 4. **Autonomous Self-Healing DLQ Triage**: Automatically diagnosing root cause schema drift and generating YAML patches.
 # MAGIC 5. **Idempotent Historical Backfill**: Restating historical date windows without resetting streaming checkpoints.
 # MAGIC 6. **Databricks Genie AI Semantic Compiler**: Compiling certified system prompts and informational SQL constraints.
+# MAGIC 7. **Fail-Fast Safety Guardrails & Data Contracts**: Pre-flight linting and SLA circuit breakers.
+# MAGIC 8. **Production Storage Maintenance & Governance Tags**: Liquid Clustering file compaction (`OPTIMIZE`), `VACUUM`, and Unity Catalog compliance tags.
 # MAGIC 
 # MAGIC *Click **"Run All"** to execute the complete end-to-end flow!*
 
@@ -127,6 +129,9 @@ gold:
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
   prune_column: "started_at"
+  tags:
+    data_classification: "internal"
+    tier: "mission-critical"
   enable_dlq: true
   dlq_table: "{active_catalog}.default.dim_subscriptions_dlq"
   track_rescued_data: true
@@ -182,6 +187,9 @@ pii_splits:
     foreign_key_expr: "xxhash64(cast(subscriberId as string))"
     foreign_key_name: "subscriber_account_id"
     cluster_by: ["created_at"]
+    tags:
+      data_classification: "restricted_pii"
+      compliance_scope: "gdpr_ccpa" 
     fields:
       - name: "subscriber_email"
         type: "string"
@@ -331,3 +339,16 @@ from lakehouse_engine.core.genie import generate_genie_space_documentation
 
 genie_doc = generate_genie_space_documentation([config])
 print(genie_doc)
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ### Cell 10: Production Storage Maintenance (Liquid Compaction & Vacuum)
+# MAGIC Execute automated storage maintenance (Liquid Clustering file compaction and deleted file purging) across Gold, PII, and DLQ tables.
+
+# COMMAND ----------
+from lakehouse_engine.core.maintenance import run_table_maintenance
+import json
+
+maintenance_report = run_table_maintenance(spark, config, retention_hours=168)
+print("=== DELTA STORAGE MAINTENANCE REPORT ===")
+print(json.dumps(maintenance_report, indent=2))

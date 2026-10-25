@@ -293,6 +293,7 @@ python3 -m lakehouse_engine.cli backfill --config-path configs/examples/subscrip
 | `task dlq:triage` | Runs Autonomous DLQ Triage on quarantined records |
 | `task genie:export` | Compiles Genie Space instructions & UC constraint DDLs |
 | `task backfill CONFIG=...` | Runs historical batch backfill without altering streaming checkpoints |
+| `task delta:maintain CONFIG=...` | Runs table storage maintenance (`OPTIMIZE` + `VACUUM`) |
 | `task build` | Builds the lightweight `.whl` package to `dist/` |
 | `task lint` | Runs `ruff` linter and `mypy` type checking |
 | `task format` | Formats code with `ruff` |

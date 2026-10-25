@@ -218,6 +218,31 @@ def lint_config(target_path: str, strict: bool):
     else:
         print(f"✨ Guardrails Passed: {len(reports)} config file(s) evaluated ({total_warnings} warnings).")
 
+@cli.command("maintain")
+@click.option("--config-path", "-c", required=True, help="Path to YAML entity configuration file")
+@click.option("--retention-hours", "-r", default=168, help="Vacuum retention window in hours (default: 168 / 7 days)")
+def maintain(config_path: str, retention_hours: int):
+    """
+    Executes table maintenance (OPTIMIZE with Liquid Clustering and VACUUM) across all medallion layers.
+    """
+    from pyspark.sql import SparkSession
+    from lakehouse_engine.core.maintenance import run_table_maintenance
+
+    config = load_pipeline_config(config_path)
+    print(f"🔧 Starting Delta maintenance for entity: {config.entity_name} (Retention: {retention_hours} hours)")
+
+    spark = (
+        SparkSession.builder
+        .appName(f"lakehouse-maintain-{config.entity_name}")
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .getOrCreate()
+    )
+
+    report = run_table_maintenance(spark, config, retention_hours)
+    print("✨ Maintenance Report:")
+    print(json.dumps(report, indent=2))
+
 def main():
     cli()
 

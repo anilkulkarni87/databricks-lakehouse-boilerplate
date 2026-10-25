@@ -160,6 +160,10 @@ pii_splits:
     target_schema: "subscription_analytics_pii"
     target_table: "dim_subscriber_profiles"
     table_comment: "Restricted subscriber identity and PII profile dimension."
+    tags:
+      data_classification: "restricted_pii"
+      compliance_scope: "gdpr_ccpa"
+      owner: "identity-governance"
     unique_keys: ["subscriber_account_id"]
     foreign_key_expr: "xxhash64(cast(payload.subscriberId as string))"
     foreign_key_name: "subscriber_account_id"

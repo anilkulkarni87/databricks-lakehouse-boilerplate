@@ -377,6 +377,14 @@
           "title": "Cluster By",
           "type": "array"
         },
+        "tags": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Unity Catalog governance and compliance tags",
+          "title": "Tags",
+          "type": "object"
+        },
         "fields": {
           "items": {
             "$ref": "#/$defs/FieldDefinition"
@@ -413,6 +421,12 @@
         "checkpoint_location": {
           "title": "Checkpoint Location",
           "type": "string"
+        },
+        "auto_optimize": {
+          "default": true,
+          "description": "Enable automatic Delta write optimization and auto-compaction",
+          "title": "Auto Optimize",
+          "type": "boolean"
         },
         "audit_table": {
           "anyOf": [
@@ -642,6 +656,14 @@
           },
           "title": "Metrics",
           "type": "array"
+        },
+        "tags": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Unity Catalog governance and compliance tags",
+          "title": "Tags",
+          "type": "object"
         },
         "enable_dlq": {
           "default": true,

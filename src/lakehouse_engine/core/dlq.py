@@ -68,6 +68,15 @@ def write_dlq_table(
             .clusterBy("_dlq_timestamp")
             .saveAsTable(dlq_table_fqdn)
         )
+        try:
+            spark.sql(f"""
+                ALTER TABLE {dlq_table_fqdn} SET TBLPROPERTIES (
+                    'delta.autoOptimize.optimizeWrite' = 'true',
+                    'delta.autoOptimize.autoCompact' = 'true'
+                )
+            """)
+        except Exception as e:
+            logger.debug(f"Could not set auto-optimize on DLQ table {dlq_table_fqdn}: {e}")
 
     (
         dlq_df.write.format("delta")

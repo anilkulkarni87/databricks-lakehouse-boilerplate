@@ -90,3 +90,8 @@ tasks:
     desc: "Lint pipeline YAML configs against production safety guardrails (Usage: task config:lint [TARGET=configs])"
     cmds:
       - python3 -m lakehouse_engine.cli lint-config {{.TARGET | default "configs"}} --strict
+
+  delta:maintain:
+    desc: "Run Delta Lake storage maintenance (OPTIMIZE with Liquid Clustering + VACUUM) (Usage: task delta:maintain CONFIG=configs/examples/subscriptions.yml [HOURS=168])"
+    cmds:
+      - python3 -m lakehouse_engine.cli maintain --config-path {{.CONFIG | default "configs/examples/subscriptions.yml"}} --retention-hours {{.HOURS | default 168}}

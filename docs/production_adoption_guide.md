@@ -239,7 +239,20 @@ Import this dashboard into your Databricks SQL workspace for real-time visualiza
 4. **Top Expectation Violations**: Pie chart breakdown of quarantined root causes from the DLQ table.
 5. **Execution Audit Trail**: Live log of all batch statuses, error messages, and commit metrics.
 
-### 6.2 Operational Runbook: Quarantined Records & Incident Response
+### 6.2 Periodic Storage Maintenance (Small-File Compaction & VACUUM)
+To prevent small-file degradation from high-frequency micro-batches and keep cloud storage costs minimal:
+```bash
+# Run weekly maintenance across Gold, PII, and DLQ tables
+lakehouse-engine maintain --config-path configs/examples/subscriptions.yml --retention-hours 168
+
+# Or via Taskfile
+task delta:maintain CONFIG=configs/examples/subscriptions.yml HOURS=168
+```
+This automatically executes:
+* `OPTIMIZE`: Coalesces fragmented micro-batch Parquet files and applies Databricks Liquid Clustering sorting.
+* `VACUUM ... RETAIN 168 HOURS`: Purges stale unreferenced historical files older than 7 days.
+
+### 6.3 Operational Runbook: Quarantined Records & Incident Response
 
 When bad data or schema drift arrives in production:
 

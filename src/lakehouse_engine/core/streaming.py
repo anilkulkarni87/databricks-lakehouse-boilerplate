@@ -1,3 +1,4 @@
+import signal
 import time
 import logging
 from typing import Optional
@@ -123,7 +124,9 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
                     df=clean_gold_df,
                     cluster_by=config.gold.cluster_by,
                     table_comment=config.gold.table_comment,
-                    fields=config.gold.fields
+                    fields=config.gold.fields,
+                    tags=config.gold.tags,
+                    auto_optimize=config.runtime.auto_optimize
                 )
                 effective_order_col = config.gold.order_by_col or (
                     "updated_at" if "updated_at" in clean_gold_df.columns else None
@@ -153,7 +156,9 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
                         df=pii_df,
                         cluster_by=pii_cfg.cluster_by,
                         table_comment=pii_cfg.table_comment,
-                        fields=pii_cfg.fields
+                        fields=pii_cfg.fields,
+                        tags=pii_cfg.tags,
+                        auto_optimize=config.runtime.auto_optimize
                     )
                     merge_batch_pruned(
                         spark=spark,
@@ -219,5 +224,24 @@ def run_pipeline(spark: SparkSession, config: EntityPipelineConfig) -> None:
         writer = writer.trigger(processingTime=config.runtime.trigger_type)
 
     query = writer.start()
+
+    # Graceful shutdown handler for cloud spot preemption or container termination
+    def _graceful_shutdown(signum, frame):
+        logger.warning(
+            f"Received termination signal ({signum}). Initiating graceful micro-batch flush and checkpoint commit..."
+        )
+        try:
+            if query.isActive:
+                query.stop()
+                logger.info("Streaming query stopped cleanly without corrupting checkpoints.")
+        except Exception as shutdown_err:
+            logger.error(f"Error during graceful shutdown: {shutdown_err}")
+
+    try:
+        signal.signal(signal.SIGTERM, _graceful_shutdown)
+        signal.signal(signal.SIGINT, _graceful_shutdown)
+    except (ValueError, AttributeError):
+        pass
+
     query.awaitTermination()
     logger.info(f"Pipeline for {config.entity_name} completed.")

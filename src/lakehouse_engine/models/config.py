@@ -64,6 +64,7 @@ class RuntimeConfig(BaseModel):
     trigger_type: str = "AvailableNow"
     max_mbytes_per_trigger: int = 2000
     checkpoint_location: str
+    auto_optimize: bool = Field(True, description="Enable automatic Delta write optimization and auto-compaction")
     audit_table: Optional[str] = Field(None, description="Centralized operational telemetry audit table FQDN")
     alert_webhook: Optional[AlertWebhookConfig] = Field(default_factory=AlertWebhookConfig, description="Optional real-time alert webhook configuration")
 
@@ -98,6 +99,7 @@ class TargetTableConfig(BaseModel):
     fields: List[FieldDefinition]
     foreign_keys: List[ForeignKeyReference] = []
     metrics: List[MetricDefinition] = []
+    tags: Dict[str, str] = Field(default_factory=dict, description="Unity Catalog governance and compliance tags")
 
     # Phase 1: DLQ & Rescued Data
     enable_dlq: bool = Field(True, description="Enable automated Dead-Letter Queue quarantine for malformed records")
@@ -126,6 +128,7 @@ class PiiSplitConfig(BaseModel):
     foreign_key_expr: str
     foreign_key_name: str
     cluster_by: List[str] = []
+    tags: Dict[str, str] = Field(default_factory=dict, description="Unity Catalog governance and compliance tags")
     fields: List[FieldDefinition]
 
     @property
