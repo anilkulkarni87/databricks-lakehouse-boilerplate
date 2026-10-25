@@ -1,0 +1,51 @@
+{
+  "name": "Lakehouse Engine: Operational Platform Health & Ingestion Observability",
+  "version": 1,
+  "description": "Production-grade operational observability dashboard monitoring ingestion throughput, micro-batch latency, DLQ quarantine rates, and Data Contract SLA compliance.",
+  "parameters": [
+    {
+      "name": "lookback_hours",
+      "type": "number",
+      "default": 24,
+      "title": "Lookback Window (Hours)"
+    },
+    {
+      "name": "entity_filter",
+      "type": "string",
+      "default": "all",
+      "title": "Entity Filter ('all' or specific entity name)"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q_kpi_summary",
+      "name": "Ingestion KPI Summary (Last 24 Hours)",
+      "query": "SELECT count(*) AS total_micro_batches, sum(source_rows_read) AS total_rows_ingested, sum(target_rows_inserted) AS total_rows_inserted, sum(target_rows_updated) AS total_rows_updated, sum(dlq_rows_quarantined) AS total_rows_quarantined, round(sum(dlq_rows_quarantined) * 100.0 / nullif(sum(source_rows_read), 0), 3) AS overall_quarantine_rate_pct, round(avg(execution_duration_ms) / 1000.0, 2) AS avg_batch_duration_sec, sum(case when status = 'FAILED' then 1 else 0 end) AS failed_batches FROM saas_dw.operational_telemetry.batch_audit_log WHERE start_time >= current_timestamp() - INTERVAL 24 HOURS AND ('all' = 'all' OR entity_name = 'subscriptions')",
+      "visualization": "counter"
+    },
+    {
+      "id": "q_throughput_and_latency",
+      "name": "Micro-Batch Ingestion Throughput & Duration",
+      "query": "SELECT window(start_time, '15 minutes').start AS time_bucket, entity_name, sum(source_rows_read) AS rows_ingested, avg(execution_duration_ms) AS avg_latency_ms FROM saas_dw.operational_telemetry.batch_audit_log WHERE start_time >= current_timestamp() - INTERVAL 24 HOURS GROUP BY 1, 2 ORDER BY 1 ASC",
+      "visualization": "line_chart"
+    },
+    {
+      "id": "q_quarantine_sla_compliance",
+      "name": "Data Contract SLA: Micro-Batch Quarantine Rate %",
+      "query": "SELECT start_time, entity_name, batch_id, source_rows_read, dlq_rows_quarantined, round((dlq_rows_quarantined * 100.0) / nullif(source_rows_read, 0), 2) AS quarantine_rate_pct, 5.0 AS contract_sla_max_pct FROM saas_dw.operational_telemetry.batch_audit_log WHERE start_time >= current_timestamp() - INTERVAL 24 HOURS AND source_rows_read > 0 ORDER BY start_time DESC",
+      "visualization": "area_chart"
+    },
+    {
+      "id": "q_expectation_failure_breakdown",
+      "name": "Top Quarantined Root Causes & Expectation Violations",
+      "query": "SELECT _quarantine_reason AS failure_category, count(*) AS quarantined_record_count, round(count(*) * 100.0 / sum(count(*)) over(), 1) AS share_pct FROM saas_dw.subscription_analytics.dim_subscriptions_dlq WHERE _quarantined_at >= current_timestamp() - INTERVAL 24 HOURS GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+      "visualization": "pie_chart"
+    },
+    {
+      "id": "q_recent_audit_trail",
+      "name": "Recent Pipeline Execution Audit Trail",
+      "query": "SELECT batch_id, entity_name, start_time, status, source_rows_read, target_rows_inserted, target_rows_updated, dlq_rows_quarantined, execution_duration_ms, error_message FROM saas_dw.operational_telemetry.batch_audit_log ORDER BY start_time DESC LIMIT 100",
+      "visualization": "table"
+    }
+  ]
+}

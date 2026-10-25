@@ -189,6 +189,35 @@ def mcp_serve():
     from lakehouse_engine.mcp.server import run_mcp_server
     run_mcp_server()
 
+@cli.command("lint-config")
+@click.argument("target_path", default="configs", required=False)
+@click.option("--strict/--no-strict", default=True, help="Exit with non-zero status code if errors are found")
+def lint_config(target_path: str, strict: bool):
+    """
+    Validates pipeline YAML configurations against production-hardening safety guardrails.
+    Checks for unbounded merges, non-deterministic deduplication, raw PII leakage, and secret scope syntax.
+    """
+    from lakehouse_engine.core.guardrails import lint_file_or_directory
+
+    try:
+        all_passed, reports = lint_file_or_directory(target_path)
+    except FileNotFoundError as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
+
+    for r in reports:
+        print(r.format_console_report())
+        print()
+
+    total_errors = sum(r.error_count for r in reports)
+    total_warnings = sum(r.warning_count for r in reports)
+
+    if not all_passed and strict:
+        print(f"❌ CI Gate Failed: {total_errors} errors and {total_warnings} warnings across {len(reports)} config file(s).")
+        sys.exit(1)
+    else:
+        print(f"✨ Guardrails Passed: {len(reports)} config file(s) evaluated ({total_warnings} warnings).")
+
 def main():
     cli()
 

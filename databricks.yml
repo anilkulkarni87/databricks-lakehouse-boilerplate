@@ -16,6 +16,11 @@ targets:
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
 
+  staging:
+    mode: production
+    workspace:
+      root_path: /Workspace/Staging/lakehouse_engine
+
   prod:
     mode: production
     workspace:

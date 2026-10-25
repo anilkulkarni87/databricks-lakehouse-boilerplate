@@ -85,3 +85,8 @@ tasks:
     desc: "Scaffold a new entity YAML from sample JSON (Usage: task scaffold NAME=orders TABLE=raw_landing.orders SAMPLE=sample.json)"
     cmds:
       - python3 -m lakehouse_engine.cli scaffold --entity-name {{.NAME | default "sample_entity"}} --source-table {{.TABLE | default "raw_landing.sample_events"}} --sample-file {{.SAMPLE | default "configs/examples/sample_dlq_records.json"}}
+
+  config:lint:
+    desc: "Lint pipeline YAML configs against production safety guardrails (Usage: task config:lint [TARGET=configs])"
+    cmds:
+      - python3 -m lakehouse_engine.cli lint-config {{.TARGET | default "configs"}} --strict

@@ -3,13 +3,31 @@ entity_name: "subscriptions"
 description: "SaaS subscription lifecycle events with automated billing contact PII separation"
 business_domain: "Subscriptions & Revenue"
 
+# 1. Secret Scope Integration (Databricks Cloud / Local Fallback)
+secrets:
+  slack_webhook: "{{secrets/lakehouse_secrets/slack_webhook}}"
+
+# 2. Fail-Fast Safety Guardrails
+guardrails:
+  enforce_primary_key_order_by: true
+  require_prune_column_on_merge: true
+  pii_leakage_detection: "strict"
+  allow_unbounded_merge: false
+
+# 3. Data Contracts & Drift Thresholds
+contract:
+  schema_drift_policy: "fail_on_incompatible"
+  max_quarantine_rate_percent: 5.0
+  quarantine_action: "fail_batch"
+  enforce_not_null_pk: true
+
 source:
   catalog: "raw_landing"
   schema: "event_stream"
   table: "silver_subscription_events"
   stream_filter_field: null
   payload_column: "payload"
-  # Phase 3: Databricks Native Binary VARIANT for 8-10x faster sub-column queries
+  # Databricks Native Binary VARIANT for sub-column queries
   payload_type: "variant"
 
 runtime:
@@ -17,6 +35,14 @@ runtime:
   max_mbytes_per_trigger: 2000
   checkpoint_location: "dbfs:/checkpoints/lakehouse_engine/subscriptions"
   audit_table: "saas_dw.operational_telemetry.batch_audit_log"
+  alert_webhook:
+    enabled: true
+    url: "${secrets.slack_webhook}"
+    min_quarantined_threshold: 10
+    include_summary: true
+    volume_anomaly_alerts: true
+    volume_drop_threshold_percent: 75.0
+    volume_spike_threshold_percent: 300.0
 
 # Non-PII Gold Curated Table
 gold:
@@ -25,18 +51,21 @@ gold:
   table: "dim_subscriptions"
   table_comment: "Curated SaaS subscription dimension. Grain: one row per active/historical subscription entity. Non-PII analytics safe."
   table_type: "dimension"
+  write_mode: "merge"
+  deduplication_mode: "in_batch"
+  order_by_col: "updated_at"
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
   prune_column: "started_at"
   schema_evolution: "mergeSchema"
 
-  # Phase 1 & 3: Dead-Letter Queue & VARIANT Rescued Data
+  # Dead-Letter Queue & VARIANT Rescued Data
   enable_dlq: true
   dlq_table: "saas_dw.subscription_analytics.dim_subscriptions_dlq"
   track_rescued_data: true
   store_rescued_as_variant: true
 
-  # Phase 2: Declarative Data Quality Expectations
+  # Declarative Data Quality Expectations
   expectations:
     - name: "valid_mrr_non_negative"
       expr: "mrr_amount >= 0.0"

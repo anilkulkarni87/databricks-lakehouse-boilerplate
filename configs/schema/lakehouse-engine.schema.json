@@ -18,7 +18,7 @@
             }
           ],
           "default": null,
-          "description": "Webhook URL (Slack, MS Teams, PagerDuty, or custom endpoint). Supports ${SLACK_WEBHOOK_URL}",
+          "description": "Webhook URL (Slack, MS Teams, PagerDuty, or custom endpoint). Supports ",
           "title": "Url"
         },
         "channel": {
@@ -45,9 +45,63 @@
           "description": "Include root-cause breakdown in the alert message",
           "title": "Include Summary",
           "type": "boolean"
+        },
+        "channel_type": {
+          "default": "slack",
+          "description": "Alert channel type: 'slack' (Block Kit) or 'generic' (JSON)",
+          "title": "Channel Type",
+          "type": "string"
+        },
+        "volume_anomaly_alerts": {
+          "default": false,
+          "description": "Enable automated volume drop/spike anomaly detection",
+          "title": "Volume Anomaly Alerts",
+          "type": "boolean"
+        },
+        "volume_drop_threshold_percent": {
+          "default": 75.0,
+          "description": "Alert if micro-batch drops more than X% below baseline volume",
+          "title": "Volume Drop Threshold Percent",
+          "type": "number"
+        },
+        "volume_spike_threshold_percent": {
+          "default": 300.0,
+          "description": "Alert if micro-batch surges more than X% above baseline volume",
+          "title": "Volume Spike Threshold Percent",
+          "type": "number"
         }
       },
       "title": "AlertWebhookConfig",
+      "type": "object"
+    },
+    "DataContractConfig": {
+      "properties": {
+        "schema_drift_policy": {
+          "default": "fail_on_incompatible",
+          "description": "Drift policy: 'fail_on_incompatible', 'evolve', or 'quarantine_row'",
+          "title": "Schema Drift Policy",
+          "type": "string"
+        },
+        "max_quarantine_rate_percent": {
+          "default": 100.0,
+          "description": "Maximum allowable DLQ quarantine percentage per batch before tripping circuit breaker",
+          "title": "Max Quarantine Rate Percent",
+          "type": "number"
+        },
+        "quarantine_action": {
+          "default": "fail_batch",
+          "description": "Action on SLA breach: 'fail_batch' or 'warn'",
+          "title": "Quarantine Action",
+          "type": "string"
+        },
+        "enforce_not_null_pk": {
+          "default": true,
+          "description": "Strict contract enforcement that primary keys must not be null",
+          "title": "Enforce Not Null Pk",
+          "type": "boolean"
+        }
+      },
+      "title": "DataContractConfig",
       "type": "object"
     },
     "ExpectationConfig": {
@@ -197,6 +251,42 @@
         "referenced_column"
       ],
       "title": "ForeignKeyReference",
+      "type": "object"
+    },
+    "GuardrailsConfig": {
+      "properties": {
+        "enforce_primary_key_order_by": {
+          "default": true,
+          "description": "Requires an ordering column for in-batch deduplication",
+          "title": "Enforce Primary Key Order By",
+          "type": "boolean"
+        },
+        "require_prune_column_on_merge": {
+          "default": true,
+          "description": "Requires partition/date pruning column on Delta merge",
+          "title": "Require Prune Column On Merge",
+          "type": "boolean"
+        },
+        "pii_leakage_detection": {
+          "default": "strict",
+          "description": "PII column check: 'strict' (fails on unsegregated PII), 'warn', or 'ignore'",
+          "title": "Pii Leakage Detection",
+          "type": "string"
+        },
+        "allow_unbounded_merge": {
+          "default": false,
+          "description": "Explicit override flag allowing unpruned full-table merge for small tables",
+          "title": "Allow Unbounded Merge",
+          "type": "boolean"
+        },
+        "enforce_expectations_action": {
+          "default": true,
+          "description": "Requires all data quality rules to have explicit actions",
+          "title": "Enforce Expectations Action",
+          "type": "boolean"
+        }
+      },
+      "title": "GuardrailsConfig",
       "type": "object"
     },
     "MetricDefinition": {
@@ -492,6 +582,44 @@
           "title": "Schema Evolution",
           "type": "string"
         },
+        "write_mode": {
+          "default": "merge",
+          "description": "Target write strategy: 'merge' (upsert) or 'append'",
+          "title": "Write Mode",
+          "type": "string"
+        },
+        "deduplication_mode": {
+          "default": "in_batch",
+          "description": "In-batch deduplication: 'in_batch' or 'none'",
+          "title": "Deduplication Mode",
+          "type": "string"
+        },
+        "order_by_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Column used to pick winner in in-batch deduplication",
+          "title": "Order By Col"
+        },
+        "lookback_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional lookback window in days for partition pruning",
+          "title": "Lookback Days"
+        },
         "fields": {
           "items": {
             "$ref": "#/$defs/FieldDefinition"
@@ -600,6 +728,30 @@
       "default": null,
       "description": "Domain classification (e.g. Finance, Subscriptions, Sales)",
       "title": "Business Domain"
+    },
+    "secrets": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Secret scope references (e.g. {{secrets/scope/key}})",
+      "title": "Secrets",
+      "type": "object"
+    },
+    "guardrails": {
+      "$ref": "#/$defs/GuardrailsConfig",
+      "description": "Fail-fast static config safety guardrails"
+    },
+    "contract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DataContractConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Data contract SLA and schema drift policy"
     },
     "source": {
       "$ref": "#/$defs/SourceConfig"

@@ -317,3 +317,76 @@ def apply_triage_patches_to_yaml(
 
     p.write_text(new_text)
     return True, diff_str
+
+@dataclass
+class DriftClassification:
+    classification: str  # "COMPATIBLE_ADDITIVE", "BREAKING_TYPE_MISMATCH", "BREAKING_KEY_CHANGE", "NO_DRIFT"
+    is_breaking: bool
+    added_columns: List[str]
+    dropped_columns: List[str]
+    type_mismatches: Dict[str, Dict[str, str]]
+    details: str
+
+def classify_schema_drift(
+    target_columns: Dict[str, str],
+    incoming_columns: Dict[str, str],
+    primary_keys: List[str]
+) -> DriftClassification:
+    """
+    Classifies schema evolution between target Delta table and incoming stream
+    to determine if automatic mergeSchema is safe or if records must be quarantined.
+    """
+    target_keys = set(target_columns.keys())
+    incoming_keys = set(incoming_columns.keys())
+
+    added = sorted(list(incoming_keys - target_keys))
+    dropped = sorted(list(target_keys - incoming_keys))
+
+    # Check for dropped or missing primary keys
+    for pk in primary_keys:
+        if pk not in incoming_keys:
+            return DriftClassification(
+                classification="BREAKING_KEY_CHANGE",
+                is_breaking=True,
+                added_columns=added,
+                dropped_columns=dropped,
+                type_mismatches={},
+                details=f"Breaking change: Primary key '{pk}' is missing from incoming stream."
+            )
+
+    # Check data type compatibility
+    mismatches = {}
+    for col in target_keys.intersection(incoming_keys):
+        t_type = target_columns[col].lower().strip()
+        i_type = incoming_columns[col].lower().strip()
+        if t_type != i_type:
+            mismatches[col] = {"target": t_type, "incoming": i_type}
+
+    if mismatches:
+        return DriftClassification(
+            classification="BREAKING_TYPE_MISMATCH",
+            is_breaking=True,
+            added_columns=added,
+            dropped_columns=dropped,
+            type_mismatches=mismatches,
+            details=f"Breaking change: Incompatible types detected in {list(mismatches.keys())}."
+        )
+
+    if added:
+        return DriftClassification(
+            classification="COMPATIBLE_ADDITIVE",
+            is_breaking=False,
+            added_columns=added,
+            dropped_columns=dropped,
+            type_mismatches={},
+            details=f"Safe schema evolution: {len(added)} new nullable columns detected ({', '.join(added)})."
+        )
+
+    return DriftClassification(
+        classification="NO_DRIFT",
+        is_breaking=False,
+        added_columns=[],
+        dropped_columns=dropped,
+        type_mismatches={},
+        details="Incoming schema matches target schema."
+    )

@@ -1,4 +1,4 @@
-name: CI & Quality Assurance
+name: CI & Enterprise Quality Assurance
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   test-and-validate:
+    name: "Python ${{ matrix.python-version }} | Quality Gates"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -28,11 +29,22 @@ jobs:
           pip install build pytest
           pip install -e ".[dev]"
 
+      - name: Code Syntax & Import Verification
+        run: |
+          python -m compileall src/ tests/
+
       - name: Run Unit Test Suite
         env:
           PYTHONPATH: src
         run: |
           python3 -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Fail-Fast Config Guardrails CI Gate
+        env:
+          PYTHONPATH: src
+          SECRET_LAKEHOUSE_SECRETS_SLACK_WEBHOOK: "https://hooks.slack.com/services/ci-mock"
+        run: |
+          python3 -m lakehouse_engine.cli lint-config configs/ --strict
 
       - name: Validate Entity YAML Configurations Against Pydantic Models
         env:
@@ -47,7 +59,7 @@ jobs:
           print(f"Validating {len(yaml_files)} YAML configurations...")
           for yf in yaml_files:
               print(f" -> Validating {yf}")
-              load_pipeline_config(yf, {"CATALOG": "test_cat", "CHECKPOINT_ROOT": "/test/root"})
+              load_pipeline_config(yf, {"CATALOG": "test_cat", "CHECKPOINT_ROOT": "/test/root"}, allow_unresolved_secrets=True)
           print(" All YAML configurations validated successfully!")
           '
 
