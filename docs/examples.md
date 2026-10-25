@@ -1,6 +1,6 @@
 # Practical Examples & Walkthroughs
 
-**[About](index.md)** | **[Hardening Roadmap](hardening_roadmap.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
+**[About](index.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
 
 ---
 
@@ -15,6 +15,22 @@ The following YAML demonstrates a complete entity definition with environment to
 ```yaml
 version: "1.0"
 entity_name: "subscriptions"
+
+# Secret Scope Integration
+secrets:
+  slack_webhook: "{{secrets/lakehouse_secrets/slack_webhook}}"
+
+# Fail-Fast Safety Guardrails
+guardrails:
+  enforce_primary_key_order_by: true
+  require_prune_column_on_merge: true
+  pii_leakage_detection: "strict"
+
+# Data Contract SLA Thresholds
+contract:
+  schema_drift_policy: "fail_on_incompatible"
+  max_quarantine_rate_percent: 5.0
+  quarantine_action: "fail_batch"
 
 source:
   catalog: "${CATALOG:-main}"

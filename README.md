@@ -287,6 +287,7 @@ python3 -m lakehouse_engine.cli backfill --config-path configs/examples/subscrip
 | :--- | :--- |
 | `task install` | Installs local Python environment and dev dependencies |
 | `task test` | Runs unit tests across all engine domains |
+| `task config:lint` | Runs pre-flight safety guardrail linting across all pipeline YAMLs |
 | `task schema:export` | Exports JSON Schema for IDE autocomplete (`lakehouse-engine.schema.json`) |
 | `task scaffold NAME=...` | Scaffolds declarative YAML configuration from sample JSON |
 | `task dlq:triage` | Runs Autonomous DLQ Triage on quarantined records |

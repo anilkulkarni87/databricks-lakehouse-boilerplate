@@ -21,7 +21,7 @@
 
 # COMMAND ----------
 # Update path to where your wheel artifact is stored in Unity Catalog Volumes
-# MAGIC %pip install /Volumes/main/default/library/lakehouse_engine-0.1.0-py3-none-any.whl --force-reinstall
+# MAGIC %pip install /Volumes/main/default/library/lakehouse_engine-0.2.0-py3-none-any.whl --force-reinstall
 
 # COMMAND ----------
 # MAGIC %md
@@ -93,6 +93,19 @@ from lakehouse_engine.core.streaming import run_pipeline
 config_yaml = f"""
 version: "1.0"
 entity_name: "subscriptions"
+
+# Fail-Fast Production Safety Guardrails
+guardrails:
+  enforce_primary_key_order_by: true
+  require_prune_column_on_merge: true
+  pii_leakage_detection: "strict"
+
+# Data Contract SLA Thresholds
+contract:
+  schema_drift_policy: "fail_on_incompatible"
+  max_quarantine_rate_percent: 75.0   # POC threshold allowing DLQ inspection in Cell 6
+  quarantine_action: "fail_batch"
+  enforce_not_null_pk: true
 
 source:
   catalog: "{active_catalog}"
@@ -184,8 +197,18 @@ pii_splits:
         description: "Profile creation timestamp"
 """
 
+from lakehouse_engine.core.guardrails import lint_pipeline_config
+
 config = load_pipeline_config(config_yaml)
-print("✅ Loaded pipeline config with automated PII splits and expectations!")
+
+# Execute Pre-Flight Config Guardrail Linting
+lint_report = lint_pipeline_config(config)
+print(lint_report.format_console_report())
+
+if not lint_report.is_valid:
+    raise ValueError("Config guardrails failed! Halting pipeline execution.")
+
+print("✅ Configuration validated and approved for streaming ingestion!")
 
 # COMMAND ----------
 # MAGIC %md

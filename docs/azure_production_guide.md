@@ -1,6 +1,6 @@
 # Azure Databricks Production Guide
 
-**[About](index.md)** | **[Hardening Roadmap](hardening_roadmap.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
+**[About](index.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
 
 ---
 
@@ -127,17 +127,28 @@ terraform apply -var-file="env_conf/dev.tfvars" -auto-approve
 
 ---
 
-### Step 5: Upload Artifacts to Unity Catalog Volumes
-Sync the built wheel and entity YAML definition to the provisioned volumes:
+### Step 5: Pre-Flight Linting, Secret Scopes & Artifact Upload
+Before uploading configurations, verify safety guardrails and configure Azure Key Vault secret scopes:
+
 ```bash
 # Return to repository root
 cd ..
 
-# 1. Upload Wheel Artifact
-databricks fs cp dist/lakehouse_engine-0.1.0-py3-none-any.whl \
-  dbfs:/Volumes/dev_lakehouse/ecommerce/library/lakehouse_engine-0.1.0-py3-none-any.whl
+# 1. Pre-flight verify configurations against production safety guardrails
+task config:lint
 
-# 2. Upload Entity YAML Config
+# 2. (Optional) Link Azure Key Vault as a Databricks Secret Scope
+databricks secrets create-scope \
+  --scope lakehouse_secrets \
+  --scope-backend-type AZURE_KEYVAULT \
+  --resource-id "/subscriptions/<AZURE_SUB_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<KV_NAME>" \
+  --dns-name "https://<KV_NAME>.vault.azure.net/"
+
+# 3. Upload Wheel Artifact
+databricks fs cp dist/lakehouse_engine-*.whl \
+  dbfs:/Volumes/dev_lakehouse/ecommerce/library/lakehouse_engine-0.2.0-py3-none-any.whl
+
+# 4. Upload Entity YAML Config
 databricks fs cp configs/examples/subscriptions.yml \
   dbfs:/Volumes/dev_lakehouse/ecommerce/configs/subscriptions.yml
 ```

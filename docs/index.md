@@ -1,6 +1,6 @@
 # Lakehouse Engine
 
-**[About](index.md)** | **[Hardening Roadmap](hardening_roadmap.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
+**[About](index.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
 
 ---
 
@@ -19,6 +19,10 @@ In traditional data engineering teams, each new business entity requires writing
 * **Autonomous Self-Healing DLQ Triage**: Inspects quarantined records, determines root cause failures (schema drift, new categorical values), and generates self-healing YAML patches with an automated `--apply-fix` unified diff generator.
 * **Databricks Genie AI Semantic Compiler**: Compiles pipeline metadata into certified system prompts and informational constraints (`NOT ENFORCED`) for Databricks Genie and Text-to-SQL conversational agents.
 * **Model Context Protocol (MCP) Server**: Provides native MCP endpoints for AI coding assistants (Claude Desktop, Cursor, Antigravity) to scaffold and validate lakehouse entities.
+* **Fail-Fast Config Guardrails & Static Linting**: Pre-flight validation (`lakehouse-engine lint-config` / `task config:lint`) that prevents unbounded full-table merges, non-deterministic deduplication, and raw PII leakage before code ever touches Databricks.
+* **Enterprise Secret Scope Resolution**: Resolves credentials directly from Databricks Secret Manager (`{{secrets/<scope>/<key>}}`) with automatic environment variable fallbacks for local and CI workflows.
+* **Data Contract SLAs & Quarantine Circuit Breakers**: Declarative contract limits (`contract.max_quarantine_rate_percent`) that halt execution and alert engineers when corrupt records breach agreed-upon thresholds.
+* **Operational Observability & Real-Time Alerts**: Rich Slack Block Kit notifications for DLQ events, contract breaches, and micro-batch volume drop/spike anomalies, backed by a pre-built Databricks SQL dashboard (`dashboards/pipeline_health.json`).
 
 ---
 

@@ -1,6 +1,6 @@
 # Production Adoption Guide
 
-**[About](index.md)** | **[Hardening Roadmap](hardening_roadmap.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
+**[About](index.md)** | **[Azure Guide](azure_production_guide.md)** | **[Production Guide](production_adoption_guide.md)** | **[Limitations](limitations.md)** | **[Pros & Cons](pros_and_cons.md)** | **[Examples](examples.md)** | **[GitHub Repository](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate)**
 
 ---
 
@@ -183,29 +183,63 @@ When promoting through environments:
 
 ---
 
-## 5. Automated CI/CD Quality Gate
+## 5. Enterprise Hardening: Guardrails, Secrets & Data Contracts
 
-Add a GitHub Actions or GitLab CI workflow that enforces quality before any code or YAML configuration merges into `main`:
+### 5.1 Fail-Fast Config Guardrails CI Gate
+Before any configuration is merged or deployed, run the pre-flight safety validator:
+```bash
+# Run local guardrails verification across all configs
+task config:lint
 
-```yaml
-# .github/workflows/ci.yml
-- name: Run Test Suite
-  run: task test
-
-- name: Validate All YAML Configs
-  run: |
-    python3 -c '
-    from pathlib import Path
-    from lakehouse_engine.core.config_loader import load_pipeline_config
-    for yf in Path("configs").glob("**/*.y*ml"):
-        load_pipeline_config(yf, {"CATALOG": "test", "CHECKPOINT_ROOT": "/test"})
-    print("All configs valid!")
-    '
+# Or invoke the CLI directly
+lakehouse-engine lint-config configs/ --strict
 ```
+
+The guardrails validator checks:
+* ❌ **Unbounded Merge Prevention**: Verifies that every Delta merge (`write_mode: merge`) declares a `prune_column` (e.g. partition date). Full table scans are blocked in CI unless explicitly overridden via `guardrails.allow_unbounded_merge: true` for tiny tables.
+* ❌ **Deterministic Deduplication**: Enforces that in-batch deduplication specifies an explicit `order_by_col` or standard timestamp column (`updated_at`, `event_timestamp`) so duplicate records are never dropped non-deterministically.
+* ❌ **PII Leakage Scanning**: Scans non-PII Gold tables for unmasked sensitive columns (`email`, `phone`, `ssn`, `tax_id`). Blocks CI in `strict` mode unless fields are moved to `pii_splits` or protected by Unity Catalog column masks.
+
+### 5.2 Secret Scope Resolution (Zero Plaintext Secrets)
+Never commit API tokens, passwords, or webhook URLs to Git. Use Databricks Secret Scopes in your YAML configs:
+```yaml
+secrets:
+  slack_webhook: "{{secrets/lakehouse_secrets/slack_webhook}}"
+
+runtime:
+  alert_webhook:
+    enabled: true
+    url: "${secrets.slack_webhook}"
+```
+* **In Databricks**: Resolves automatically via `dbutils.secrets.get("lakehouse_secrets", "slack_webhook")`.
+* **In Local Dev & CI**: Falls back seamlessly to environment variables (`SECRET_LAKEHOUSE_SECRETS_SLACK_WEBHOOK` or `SLACK_WEBHOOK`).
+
+### 5.3 Data Contract SLAs & Quarantine Circuit Breakers
+To stop corrupt data upstream from overwhelming downstream analytics, declare a contract SLA:
+```yaml
+contract:
+  schema_drift_policy: "fail_on_incompatible"
+  max_quarantine_rate_percent: 5.0     # Maximum acceptable DLQ rate
+  quarantine_action: "fail_batch"      # Halt micro-batch if SLA is breached
+  enforce_not_null_pk: true
+```
+If more than 5% of incoming records in a batch fail validation, the engine trips the circuit breaker, halts the batch, logs an audit violation, and dispatches a high-urgency Slack alert.
 
 ---
 
-## 6. Operational Runbook: Quarantined Records & Incident Response
+## 6. Operational Observability & Databricks SQL Dashboard
+
+### 6.1 Pre-Built Operational Health Dashboard
+Lakehouse Engine includes a pre-configured, production-ready Databricks SQL dashboard definition in [`dashboards/pipeline_health.json`](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate/blob/main/dashboards/pipeline_health.json).
+
+Import this dashboard into your Databricks SQL workspace for real-time visualization:
+1. **Ingestion KPI Summary**: Active batch counts, total ingested, inserted, updated, and quarantined rows over the last 24 hours.
+2. **Micro-Batch Ingestion Throughput & Duration**: 15-minute rolling trends for row volume and latency.
+3. **Data Contract SLA Compliance**: Micro-batch quarantine rate % plotted directly against the 5.0% contract threshold line.
+4. **Top Expectation Violations**: Pie chart breakdown of quarantined root causes from the DLQ table.
+5. **Execution Audit Trail**: Live log of all batch statuses, error messages, and commit metrics.
+
+### 6.2 Operational Runbook: Quarantined Records & Incident Response
 
 When bad data or schema drift arrives in production:
 
