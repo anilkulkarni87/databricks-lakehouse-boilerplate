@@ -244,7 +244,7 @@ def lint_file_or_directory(path: Union[str, Path]) -> Tuple[bool, List[LintRepor
 
     for yf in files_to_lint:
         try:
-            cfg = load_pipeline_config(yf, allow_unresolved_secrets=True)
+            cfg = load_pipeline_config(yf, allow_unresolved_secrets=True, skip_secret_resolution=True)
             report = lint_pipeline_config(cfg, file_path=str(yf))
             reports.append(report)
             if not report.is_valid:

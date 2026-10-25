@@ -110,7 +110,8 @@ def load_pipeline_config(
     config_source: Union[str, Path],
     env_vars: Optional[Dict[str, str]] = None,
     secrets_store: Optional[Dict[str, str]] = None,
-    allow_unresolved_secrets: bool = False
+    allow_unresolved_secrets: bool = False,
+    skip_secret_resolution: bool = False
 ) -> EntityPipelineConfig:
     """
     Loads and validates an EntityPipelineConfig from a YAML file path or raw YAML string,
@@ -129,15 +130,16 @@ def load_pipeline_config(
     # 1. Substitute environment variables
     interpolated_yaml = substitute_env_vars(raw_text, env_vars)
 
-    # 2. Substitute secret scopes
-    if allow_unresolved_secrets:
-        try:
+    # 2. Substitute secret scopes (skip during static guardrail linting)
+    if not skip_secret_resolution:
+        if allow_unresolved_secrets:
+            try:
+                interpolated_yaml = substitute_secrets(interpolated_yaml, secrets_store)
+            except ValueError:
+                # Leave placeholders intact for offline testing
+                pass
+        else:
             interpolated_yaml = substitute_secrets(interpolated_yaml, secrets_store)
-        except ValueError:
-            # Leave placeholders intact for offline linting
-            pass
-    else:
-        interpolated_yaml = substitute_secrets(interpolated_yaml, secrets_store)
 
     raw_dict = yaml.safe_load(interpolated_yaml)
 

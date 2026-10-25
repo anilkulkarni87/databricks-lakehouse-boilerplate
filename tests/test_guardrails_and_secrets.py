@@ -211,5 +211,15 @@ gold:
         self.assertIn("Volume Anomaly (DROP)", payload["blocks"][0]["text"]["text"])
         self.assertIn("-90.0%", payload["blocks"][1]["fields"][2]["text"])
 
+    def test_guardrail_linting_with_resolved_secret_env_var_set(self):
+        from lakehouse_engine.core.guardrails import lint_file_or_directory
+        os.environ["SECRET_LAKEHOUSE_SECRETS_SLACK_WEBHOOK"] = "https://hooks.slack.com/services/ci-mock"
+        try:
+            all_passed, reports = lint_file_or_directory("configs/examples/subscriptions.yml")
+            self.assertTrue(all_passed)
+            self.assertEqual(reports[0].error_count, 0)
+        finally:
+            del os.environ["SECRET_LAKEHOUSE_SECRETS_SLACK_WEBHOOK"]
+
 if __name__ == "__main__":
     unittest.main()
