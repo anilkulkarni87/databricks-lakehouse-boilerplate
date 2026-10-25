@@ -4,22 +4,30 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "lakehouse-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Declarative, metadata-driven Databricks Lakehouse ETL framework with automated PII segregation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Data Platform Team" }]
+
+# Core runtime dependencies required by the wheel.
+# Note: pyspark and delta-spark are provided by the Databricks Runtime (DBR) environment
+# and must NOT be declared as mandatory dependencies here to prevent DBR pip dependency conflicts.
 dependencies = [
-    "pyspark>=3.5.0",
-    "delta-spark>=3.2.0",
     "pydantic>=2.7.0",
     "pyyaml>=6.0.1",
     "click>=8.1.7",
 ]
 
 [project.optional-dependencies]
+local = [
+    "pyspark>=3.5.0",
+    "delta-spark>=3.2.0",
+]
 dev = [
+    "pyspark>=3.5.0",
+    "delta-spark>=3.2.0",
     "pytest>=8.0.0",
     "chispa>=0.9.4",
     "ruff>=0.4.0",

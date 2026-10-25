@@ -30,8 +30,9 @@ tasks:
   build:
     desc: Build Python wheel artifact for Databricks deployment
     cmds:
-      - python -m pip install build
-      - python -m build --wheel
+      - python3 -c "import shutil; shutil.rmtree('dist', ignore_errors=True); shutil.rmtree('build', ignore_errors=True)"
+      - python3 -m pip install --quiet build
+      - python3 -m build --wheel
       - ls -lh dist/
 
   tf:init:
