@@ -22,7 +22,7 @@ In traditional data engineering teams, each new business entity requires writing
 * **Fail-Fast Config Guardrails & Static Linting**: Pre-flight validation (`lakehouse-engine lint-config` / `task config:lint`) that prevents unbounded full-table merges, non-deterministic deduplication, and raw PII leakage before code ever touches Databricks.
 * **Enterprise Secret Scope Resolution**: Resolves credentials directly from Databricks Secret Manager (`{{secrets/<scope>/<key>}}`) with automatic environment variable fallbacks for local and CI workflows.
 * **Data Contract SLAs & Quarantine Circuit Breakers**: Declarative contract limits (`contract.max_quarantine_rate_percent`) that halt execution and alert engineers when corrupt records breach agreed-upon thresholds.
-* **Operational Observability & Real-Time Alerts**: Rich Slack Block Kit notifications for DLQ events, contract breaches, and micro-batch volume drop/spike anomalies, backed by a pre-built Databricks SQL dashboard (`dashboards/pipeline_health.json`).
+* **Operational Observability & Real-Time Alerts**: Rich Slack Block Kit notifications for DLQ events, contract breaches, and micro-batch volume drop/spike anomalies, backed by a pre-built Databricks SQL dashboard (`dashboards/pipeline_health.lvdash.json`).
 
 ---
 

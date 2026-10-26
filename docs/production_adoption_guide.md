@@ -230,7 +230,7 @@ If more than 5% of incoming records in a batch fail validation, the engine trips
 ## 6. Operational Observability & Databricks SQL Dashboard
 
 ### 6.1 Pre-Built Operational Health Dashboard
-Lakehouse Engine includes a pre-configured, production-ready Databricks SQL dashboard definition in [`dashboards/pipeline_health.json`](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate/blob/main/dashboards/pipeline_health.json).
+Lakehouse Engine includes a pre-configured, production-ready Databricks SQL dashboard definition in [`dashboards/pipeline_health.lvdash.json`](https://github.com/anilkulkarni87/databricks-lakehouse-boilerplate/blob/main/dashboards/pipeline_health.lvdash.json).
 
 Import this dashboard into your Databricks SQL workspace for real-time visualization:
 1. **Ingestion KPI Summary**: Active batch counts, total ingested, inserted, updated, and quarantined rows over the last 24 hours.

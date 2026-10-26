@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.types import (
@@ -80,29 +81,22 @@ def log_batch_audit(
     try:
         ensure_audit_table(spark, audit_table_fqdn)
 
+        now = datetime.now(timezone.utc)
         audit_data = [(
             int(batch_id),
             str(entity_name),
             str(target_table),
-            None,  # will be filled by current_timestamp()
+            now,
             int(execution_duration_ms),
             int(source_rows_read),
             int(target_rows_inserted),
             int(target_rows_updated),
             int(dlq_rows_quarantined),
             str(status),
-            error_message
+            str(error_message) if error_message is not None else None
         )]
 
-        columns = [
-            "batch_id", "entity_name", "target_table", "_dummy_ts",
-            "execution_duration_ms", "source_rows_read", "target_rows_inserted",
-            "target_rows_updated", "dlq_rows_quarantined", "status", "error_message"
-        ]
-
-        audit_df = spark.createDataFrame(audit_data, schema=columns).withColumn(
-            "batch_timestamp", F.current_timestamp()
-        ).drop("_dummy_ts")
+        audit_df = spark.createDataFrame(audit_data, schema=AUDIT_TABLE_SCHEMA)
 
         audit_df.write.format("delta").mode("append").saveAsTable(audit_table_fqdn)
         logger.info(f"Successfully logged batch {batch_id} telemetry to {audit_table_fqdn}")

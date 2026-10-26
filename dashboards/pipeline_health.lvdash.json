@@ -1,0 +1,186 @@
+{
+  "datasets": [
+    {
+      "name": "dataset_audit_kpis",
+      "displayName": "Ingestion KPI Summary",
+      "queryLines": [
+        "SELECT ",
+        "  count(*) AS total_micro_batches, ",
+        "  coalesce(sum(source_rows_read), 0) AS total_rows_ingested, ",
+        "  coalesce(sum(target_rows_inserted), 0) AS total_rows_inserted, ",
+        "  coalesce(sum(target_rows_updated), 0) AS total_rows_updated, ",
+        "  coalesce(sum(dlq_rows_quarantined), 0) AS total_rows_quarantined, ",
+        "  round(coalesce(sum(dlq_rows_quarantined) * 100.0 / nullif(sum(source_rows_read), 0), 0.0), 2) AS overall_quarantine_rate_pct, ",
+        "  round(avg(execution_duration_ms) / 1000.0, 2) AS avg_batch_duration_sec, ",
+        "  sum(CASE WHEN status = \"FAILED\" THEN 1 ELSE 0 END) AS failed_batches ",
+        "FROM default.pipeline_batch_audit ",
+        "WHERE batch_timestamp >= current_timestamp() - INTERVAL 24 HOURS"
+      ]
+    },
+    {
+      "name": "dataset_dlq_summary",
+      "displayName": "DLQ Quarantine Root Causes",
+      "queryLines": [
+        "SELECT ",
+        "  coalesce(_dlq_reason, \"UNKNOWN_VIOLATION\") AS failure_category, ",
+        "  count(*) AS quarantined_record_count, ",
+        "  round(count(*) * 100.0 / sum(count(*)) over(), 1) AS share_pct ",
+        "FROM default.dim_subscriptions_dlq ",
+        "WHERE _dlq_timestamp >= current_timestamp() - INTERVAL 24 HOURS ",
+        "GROUP BY 1 ",
+        "ORDER BY 2 DESC ",
+        "LIMIT 10"
+      ]
+    },
+    {
+      "name": "dataset_batch_audit_trail",
+      "displayName": "Recent Batch Execution Audit Trail",
+      "queryLines": [
+        "SELECT ",
+        "  batch_id, ",
+        "  entity_name, ",
+        "  batch_timestamp, ",
+        "  status, ",
+        "  source_rows_read, ",
+        "  target_rows_inserted, ",
+        "  target_rows_updated, ",
+        "  dlq_rows_quarantined, ",
+        "  execution_duration_ms, ",
+        "  error_message ",
+        "FROM default.pipeline_batch_audit ",
+        "ORDER BY batch_timestamp DESC ",
+        "LIMIT 100"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview_canvas",
+      "displayName": "Pipeline Health & Observability",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "header_text",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## **Lakehouse Engine: Operational Health & Observability**\n",
+                "Real-time monitoring of micro-batch throughput, DLQ quarantine rates, and Data Contract SLA compliance."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "widget_audit_trail",
+            "queries": [
+              {
+                "name": "main_audit_query",
+                "query": {
+                  "datasetName": "dataset_batch_audit_trail",
+                  "fields": [
+                    {
+                      "name": "batch_id",
+                      "expression": "`batch_id`"
+                    },
+                    {
+                      "name": "entity_name",
+                      "expression": "`entity_name`"
+                    },
+                    {
+                      "name": "batch_timestamp",
+                      "expression": "`batch_timestamp`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "source_rows_read",
+                      "expression": "`source_rows_read`"
+                    },
+                    {
+                      "name": "target_rows_inserted",
+                      "expression": "`target_rows_inserted`"
+                    },
+                    {
+                      "name": "target_rows_updated",
+                      "expression": "`target_rows_updated`"
+                    },
+                    {
+                      "name": "dlq_rows_quarantined",
+                      "expression": "`dlq_rows_quarantined`"
+                    },
+                    {
+                      "name": "execution_duration_ms",
+                      "expression": "`execution_duration_ms`"
+                    },
+                    {
+                      "name": "error_message",
+                      "expression": "`error_message`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Recent Pipeline Batch Executions"
+              },
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "batch_id"
+                  },
+                  {
+                    "fieldName": "entity_name"
+                  },
+                  {
+                    "fieldName": "batch_timestamp"
+                  },
+                  {
+                    "fieldName": "status"
+                  },
+                  {
+                    "fieldName": "source_rows_read"
+                  },
+                  {
+                    "fieldName": "target_rows_inserted"
+                  },
+                  {
+                    "fieldName": "target_rows_updated"
+                  },
+                  {
+                    "fieldName": "dlq_rows_quarantined"
+                  },
+                  {
+                    "fieldName": "execution_duration_ms"
+                  },
+                  {
+                    "fieldName": "error_message"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    }
+  ]
+}

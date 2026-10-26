@@ -43,6 +43,13 @@ def run_backfill(
 
     # 2. Apply Date Range Filters if specified
     filter_date_col = date_column or config.gold.prune_column or "created_at"
+    # Auto-resolve target field name to source column name if target field was passed
+    if filter_date_col not in source_df.columns and config.gold.fields:
+        for f in config.gold.fields:
+            if f.name == filter_date_col and f.expr in source_df.columns:
+                filter_date_col = f.expr
+                break
+
     if filter_date_col in source_df.columns:
         if start_date:
             source_df = source_df.filter(F.to_date(F.col(filter_date_col)) >= F.to_date(F.lit(start_date)))

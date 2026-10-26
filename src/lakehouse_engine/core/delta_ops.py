@@ -4,9 +4,10 @@ try:
     from pyspark.sql import DataFrame, functions as F
     from delta.tables import DeltaTable
 except ImportError:
+    from unittest.mock import MagicMock
     DataFrame = Any  # type: ignore
-    F = None         # type: ignore
-    DeltaTable = None # type: ignore
+    F = MagicMock()  # type: ignore
+    DeltaTable = MagicMock() # type: ignore
 from lakehouse_engine.models.config import FieldDefinition
 
 logger = logging.getLogger(__name__)

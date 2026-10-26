@@ -357,7 +357,7 @@ run_backfill(
     config=config,
     start_date="2026-01-01",
     end_date="2026-12-31",
-    date_column="started_at",
+    date_column="startedOn",  # Resolves against landing event timestamp
     reset_checkpoint=False
 )
 print("✅ Historical backfill completed with Delta idempotency!")
