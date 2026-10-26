@@ -425,28 +425,49 @@ record_test(
 # COMMAND ----------
 print("💰 Computing FinOps Ingestion Cost Metrics...")
 
-total_rows_processed = scale_factor + min(5000, scale_factor)
-total_pipeline_seconds = batch_duration + pruned_duration + backfill_duration
-hours_consumed = total_pipeline_seconds / 3600.0
+# 1. Extract Isolated Production Micro-Batch Metrics from Audit Telemetry
+audit_rows_list = spark.table(audit_fqdn).filter(F.col("batch_id") == 0).collect()
+if audit_rows_list:
+    stream_ms = audit_rows_list[0]["execution_duration_ms"]
+    stream_rows = audit_rows_list[0]["source_rows_read"]
+else:
+    stream_ms = batch_duration * 1000.0
+    stream_rows = scale_factor
 
-dbu_rate_per_hour = 3.0
-dollar_per_dbu = 0.40
-total_dbu_consumed = hours_consumed * dbu_rate_per_hour
-total_cost_usd = total_dbu_consumed * dollar_per_dbu
-cost_per_million_rows = (total_cost_usd / total_rows_processed) * 1_000_000
+stream_seconds = stream_ms / 1000.0
+stream_hours = stream_seconds / 3600.0
 
-print(f"Total Rows Processed:       {total_rows_processed:,}")
-print(f"Total Compute Execution:    {total_pipeline_seconds:.2f} seconds ({hours_consumed:.5f} hours)")
-print(f"Estimated DBU Consumption:  {total_dbu_consumed:.4f} DBUs")
-print(f"Estimated Cost:             ${total_cost_usd:.4f} USD")
-print(f"⚡ Ingestion Unit Cost:     ${cost_per_million_rows:.4f} per 1M rows")
+# 2. Cluster SKU & DBU Rate Detection
+is_job_cluster = spark.conf.get("spark.databricks.clusterUsageTags.clusterType", "AllPurpose") == "Job"
+dbu_rate_per_hour = 3.0  # Standard multi-node DBU profile
+dollar_per_dbu = 0.15 if is_job_cluster else 0.40  # Automated Jobs (~$0.15/DBU) vs All-Purpose (~$0.40/DBU)
 
-# For micro test scale (<100k rows), fixed compilation overhead (~110s) dominates; adjust SLA threshold accordingly
-effective_sla = 0.25 if scale_factor >= 100000 else 5.0
+# 3. Dedicated Streaming Ingestion Unit Cost (Production Metric)
+stream_dbus = stream_hours * dbu_rate_per_hour
+stream_cost_usd = stream_dbus * dollar_per_dbu
+stream_unit_cost_per_million = (stream_cost_usd / stream_rows) * 1_000_000 if stream_rows > 0 else 0.0
+
+# 4. Total Verification Suite Compute Cost (Ingestion + Benchmark + Backfill)
+total_suite_seconds = batch_duration + pruned_duration + backfill_duration
+total_suite_hours = total_suite_seconds / 3600.0
+total_suite_dbus = total_suite_hours * dbu_rate_per_hour
+total_suite_cost_usd = total_suite_dbus * dollar_per_dbu
+
+print(f"📊 PRODUCTION STREAMING INGESTION (Micro-Batch #0):")
+print(f"  Rows Ingested:             {stream_rows:,}")
+print(f"  Streaming Batch Duration:  {stream_seconds:.2f} seconds ({stream_hours:.5f} hours)")
+print(f"  Estimated DBUs Consumed:   {stream_dbus:.4f} DBUs (Rate: {dbu_rate_per_hour} DBU/hr)")
+print(f"  Micro-Batch Cost:          ${stream_cost_usd:.4f} USD (Compute Tier: {'Automated Job' if is_job_cluster else 'All-Purpose Interactive'})")
+print(f"  ⚡ Ingestion Unit Cost:     ${stream_unit_cost_per_million:.4f} / 1M rows")
+print("")
+print(f"🔬 TOTAL TEST SUITE RUNTIME (Ingestion + Benchmark + Backfill):")
+print(f"  Total Active Compute:      {total_suite_seconds:.2f} seconds ({total_suite_hours:.5f} hours)")
+print(f"  Total Suite Cost:          ${total_suite_cost_usd:.4f} USD ({total_suite_dbus:.4f} DBUs)")
+
 record_test(
-    "FinOps Unit Cost SLA",
-    cost_per_million_rows <= effective_sla,
-    f"${cost_per_million_rows:.4f} / 1M rows (SLA: <= ${effective_sla:.2f} for {total_rows_processed:,} sample rows)"
+    "FinOps Ingestion Unit Cost SLA",
+    stream_unit_cost_per_million <= 0.25,
+    f"${stream_unit_cost_per_million:.4f} / 1M rows (SLA: <= $0.25 on production streaming ingestion)"
 )
 
 # COMMAND ----------
