@@ -162,3 +162,24 @@ def merge_batch_pruned(
         merge_builder = merge_builder.whenMatchedUpdateAll()
 
     merge_builder.whenNotMatchedInsertAll().execute()
+
+
+def merge_batch_unpruned(
+    spark,
+    target_table_fqdn: str,
+    source_df: DataFrame,
+    unique_keys: List[str],
+    order_by_col: Optional[str] = None
+) -> None:
+    """
+    Executes a standard unbounded Delta MERGE without partition date pruning.
+    Used for small tables or performance benchmarking against pruned merge.
+    """
+    return merge_batch_pruned(
+        spark=spark,
+        target_table_fqdn=target_table_fqdn,
+        source_df=source_df,
+        unique_keys=unique_keys,
+        prune_col=None,
+        order_by_col=order_by_col
+    )

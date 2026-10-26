@@ -4,8 +4,8 @@
 # MAGIC 
 # MAGIC Comprehensive in-cluster validation suite covering:
 # MAGIC 1. **High-Volume Synthetic Data Generation** (Controlled bad data, duplicates, PII, nested JSON)
-# MAGIC 2. **Delta Lake Provisioning** (Liquid Clustering `CLUSTER BY`, auto-compaction properties, column comments)
-# MAGIC 3. **Streaming Micro-Batch Execution & Performance Latency**
+# MAGIC 2. **Declarative Pipeline Ingestion & Table Provisioning** (`run_pipeline`)
+# MAGIC 3. **Delta Lake Liquid Clustering** (`CLUSTER BY`) & Table Properties
 # MAGIC 4. **In-Batch Deduplication & Idempotent Upsert**
 # MAGIC 5. **Declarative DLQ Quarantine & Circuit Breaker Expectations**
 # MAGIC 6. **PII Segregation & Cryptographic Hash Masking**
@@ -42,7 +42,6 @@ print(f"Target Catalog: '{catalog_name}' | Scale Factor: {scale_factor:,} rows |
 
 # COMMAND ----------
 import time
-import yaml
 from datetime import datetime, timezone
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -122,168 +121,159 @@ print(f"✅ Created Landing Table '{landing_table_fqdn}' with {row_count:,} rows
 # MAGIC ### Step 5: Define Pipeline Configuration & Declarative Model
 
 # COMMAND ----------
-from lakehouse_engine.models.config import EntityPipelineConfig
+from lakehouse_engine.core.config_loader import load_pipeline_config
 from lakehouse_engine.core.guardrails import lint_pipeline_config
 
-test_yaml_template = """
-pipeline:
-  name: "e2e_verification_subscriptions"
-  schedule: "Trigger.AvailableNow"
+test_yaml = f"""
+version: "1.0"
+entity_name: "e2e_verification_subscriptions"
+description: "End-to-End Databricks Verification Suite"
+
+guardrails:
+  enforce_primary_key_order_by: true
+  allow_unbounded_merge: true
+  pii_leakage_detection: "strict"
+
+contract:
+  schema_drift_policy: "fail_on_incompatible"
+  max_quarantine_rate_percent: 25.0
+  quarantine_action: "fail_batch"
+  enforce_not_null_pk: true
 
 source:
-  type: "delta"
-  catalog: "{CATALOG}"
+  catalog: "{catalog_name}"
   schema: "lakehouse_engine_landing"
   table: "stream_subscription_events"
-  stream_filter_field: "currency"
-  stream_filter_value: "USD"
-  watermark_field: "updatedOn"
-  watermark_delay: "1 hour"
+  stream_filter_field: null
+
+runtime:
+  trigger_type: "AvailableNow"
+  max_mbytes_per_trigger: 500
+  checkpoint_location: "/Volumes/{catalog_name}/lakehouse_engine_test/checkpoints/e2e_verify"
+  audit_table: "{catalog_name}.lakehouse_engine_test.dim_batch_audit"
 
 gold:
-  catalog: "{CATALOG}"
+  catalog: "{catalog_name}"
   schema: "lakehouse_engine_test"
   table: "dim_subscriptions"
-  primary_keys: ["subscription_id"]
-  dedup_sort_keys: ["updated_at DESC"]
-  cluster_by: ["subscription_id", "started_at"]
-  prune_column: "started_at"
   table_comment: "Certified Gold dimension for customer subscriptions."
-  table_properties:
-    "delta.autoOptimize.optimizeWrite": "true"
-    "delta.autoOptimize.autoCompact": "true"
+  table_type: "dimension"
+  write_mode: "merge"
+  deduplication_mode: "in_batch"
+  unique_keys: ["subscription_id"]
+  cluster_by: ["started_at"]
+  order_by_col: "updated_at"
+  prune_column: "started_at"
+  enable_dlq: true
+  dlq_table: "{catalog_name}.lakehouse_engine_test.dim_subscriptions_dlq"
+  track_rescued_data: true
   tags:
     tier: "gold"
     lifecycle: "production_verified"
+  expectations:
+    - name: "valid_subscription_status"
+      expr: "status IN ('ACTIVE', 'CANCELLED', 'PAST_DUE')"
+      action: "quarantine"
+    - name: "positive_mrr"
+      expr: "mrr_amount >= 0.0"
+      action: "fail_batch"
   fields:
     - name: "subscription_id"
       expr: "subscriptionId"
-      type: "STRING"
-      comment: "Unique surrogate key for subscription."
-    - name: "tier"
+      type: "string"
+      is_primary_key: true
+      description: "Unique surrogate key for subscription."
+    - name: "plan_tier"
       expr: "plan.tier"
-      type: "STRING"
+      type: "string"
     - name: "billing_interval"
       expr: "plan.billingInterval"
-      type: "STRING"
+      type: "string"
     - name: "mrr_amount"
-      expr: "ROUND(plan.amountCents / 100.0, 2)"
-      type: "DOUBLE"
+      expr: "cast(plan.amountCents as double) / 100.0"
+      type: "double"
     - name: "currency"
       expr: "currency"
-      type: "STRING"
+      type: "string"
     - name: "status"
       expr: "status"
-      type: "STRING"
+      type: "string"
     - name: "started_at"
       expr: "startedOn"
-      type: "TIMESTAMP"
+      type: "timestamp"
     - name: "updated_at"
       expr: "updatedOn"
-      type: "TIMESTAMP"
+      type: "timestamp"
     - name: "customer_email_hash"
       expr: "xxhash64(email)"
-      type: "BIGINT"
+      type: "bigint"
     - name: "client_headers"
       expr: "deviceContext"
-      type: "VARIANT"
+      type: "variant"
 
-dlq:
-  catalog: "{CATALOG}"
-  schema: "lakehouse_engine_test"
-  table: "dim_subscriptions_dlq"
-  table_comment: "Dead-letter queue capturing quarantined subscription records."
-  table_properties:
-    "delta.autoOptimize.optimizeWrite": "true"
-
-audit:
-  catalog: "{CATALOG}"
-  schema: "lakehouse_engine_test"
-  table: "dim_batch_audit"
-
-expectations:
-  - name: "valid_subscription_status"
-    rule: "status IN ('ACTIVE', 'CANCELLED', 'PAST_DUE')"
-    action: "quarantine"
-  - name: "positive_mrr"
-    rule: "mrr_amount >= 0.0"
-    action: "fail_batch"
-
-contract:
-  max_quarantine_rate_percent: 25.0
-
-pii:
-  catalog: "{CATALOG}"
-  schema: "lakehouse_engine_test"
-  table: "dim_subscriber_profiles_pii"
-  link_key: "customer_email_hash"
-  source_link_expr: "xxhash64(email)"
-  columns:
-    - name: "email"
-      source_expr: "email"
-    - name: "customer_name"
-      source_expr: "customerName"
-    - name: "ip_address"
-      source_expr: "ipAddress"
-
-guardrails:
-  allow_unbounded_merge: true
+pii_splits:
+  - name: "subscriber_profiles"
+    target_catalog: "{catalog_name}"
+    target_schema: "lakehouse_engine_test"
+    target_table: "dim_subscriber_profiles_pii"
+    table_comment: "Restricted subscriber identity and PII profile dimension"
+    unique_keys: ["customer_email_hash"]
+    foreign_key_expr: "xxhash64(email)"
+    foreign_key_name: "customer_email_hash"
+    cluster_by: ["created_at"]
+    fields:
+      - name: "email"
+        expr: "email"
+        type: "string"
+      - name: "customer_name"
+        expr: "customerName"
+        type: "string"
+      - name: "ip_address"
+        expr: "ipAddress"
+        type: "string"
+      - name: "created_at"
+        expr: "startedOn"
+        type: "timestamp"
 """
 
-resolved_yaml = test_yaml_template.replace("{CATALOG}", catalog_name)
-config_dict = yaml.safe_load(resolved_yaml)
-config = EntityPipelineConfig(**config_dict)
-
+config = load_pipeline_config(test_yaml)
 report = lint_pipeline_config(config)
-print("🛡 Pre-Flight Guardrails Check:")
+
+print("🛡️ Pre-Flight Guardrails Check:")
 print(report.format_console_report())
-assert report.error_count == 0, "Configuration failed guardrails!"
+assert report.is_valid, "Configuration failed guardrails!"
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### Step 6: Provision Tables & Verify Delta Table Properties
+# MAGIC ### Step 6: Execute Streaming Ingestion (`run_pipeline`)
 
 # COMMAND ----------
-from lakehouse_engine.core.delta_ops import ensure_delta_table
+from lakehouse_engine.core.streaming import run_pipeline
 
-gold_fqdn = f"{test_schema}.dim_subscriptions"
-dlq_fqdn = f"{test_schema}.dim_subscriptions_dlq"
+print("🚀 Executing Streaming Ingestion Pipeline...")
+t_stream_start = time.time()
 
-ensure_delta_table(spark, config.gold)
-ensure_delta_table(spark, config.dlq)
+# Clean previous checkpoint to guarantee deterministic test run
+dbutils.fs.rm(config.runtime.checkpoint_location, recurse=True)
+
+run_pipeline(spark, config)
+
+batch_duration = time.time() - t_stream_start
+print(f"✅ Ingestion completed in {batch_duration:.2f} seconds!")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ### Step 7: Verify Liquid Clustering & Delta Table Properties
+
+# COMMAND ----------
+gold_fqdn = config.gold.fqdn
+dlq_fqdn = config.gold.dlq_fqdn
 
 detail_row = spark.sql(f"DESCRIBE DETAIL {gold_fqdn}").collect()[0]
 clustering_cols = detail_row["clusteringColumns"]
 print(f"✅ Target Table '{gold_fqdn}' Liquid Clustering Columns: {clustering_cols}")
 
 assert clustering_cols is not None and len(clustering_cols) > 0, "Liquid clustering not configured!"
-
-# COMMAND ----------
-# MAGIC %md
-# MAGIC ### Step 7: Execute Streaming Micro-Batch (`Trigger.AvailableNow`)
-
-# COMMAND ----------
-from lakehouse_engine.core.streaming import process_micro_batch
-
-print("🚀 Starting Streaming Micro-Batch Ingestion...")
-batch_start = time.time()
-
-source_stream = spark.readStream.table(landing_table_fqdn)
-checkpoint_dir = f"/Volumes/{test_schema.replace('.', '/')}/checkpoints/e2e_verify"
-
-dbutils.fs.rm(checkpoint_dir, recurse=True)
-
-query = (
-    source_stream.writeStream
-    .trigger(availableNow=True)
-    .option("checkpointLocation", checkpoint_dir)
-    .foreachBatch(lambda df, batch_id: process_micro_batch(df, batch_id, config, spark))
-    .start()
-)
-
-query.awaitTermination()
-batch_duration = time.time() - batch_start
-print(f"✅ Micro-batch ingestion completed in {batch_duration:.2f} seconds!")
 
 # COMMAND ----------
 # MAGIC %md
@@ -318,7 +308,7 @@ else:
     record_test("DLQ Zero Leakage", dlq_count == 0, f"DLQ rows: {dlq_count}")
 
 # Test 3: PII Segregation & Deterministic Hashing
-pii_fqdn = f"{test_schema}.dim_subscriber_profiles_pii"
+pii_fqdn = config.pii_splits[0].fqdn
 pii_count = spark.table(pii_fqdn).count()
 record_test(
     "PII Isolation Table",
@@ -335,7 +325,7 @@ record_test(
 )
 
 # Test 5: Audit Telemetry Table
-audit_fqdn = f"{test_schema}.dim_batch_audit"
+audit_fqdn = config.runtime.audit_table
 audit_df = spark.table(audit_fqdn).orderBy(F.col("batch_timestamp").desc())
 audit_rows = audit_df.count()
 record_test(
@@ -349,7 +339,7 @@ record_test(
 # MAGIC ### Step 9: Benchmark Pruned vs. Unpruned MERGE Performance
 
 # COMMAND ----------
-print("⏱ Benchmarking Pruned vs. Unpruned Delta MERGE Performance...")
+print("⏱️ Benchmarking Pruned vs. Unpruned Delta MERGE Performance...")
 
 update_df = landing_df.limit(min(5000, scale_factor)).withColumn("plan.amountCents", F.lit(999900))
 
@@ -359,11 +349,24 @@ from lakehouse_engine.core.delta_ops import merge_batch_pruned, merge_batch_unpr
 gold_update_df = transform_entity(update_df, config.gold, config.source.payload_column, config.source.payload_type)
 
 t_start = time.time()
-merge_batch_pruned(spark, gold_update_df, config.gold)
+merge_batch_pruned(
+    spark=spark,
+    target_table_fqdn=gold_fqdn,
+    source_df=gold_update_df,
+    unique_keys=config.gold.unique_keys,
+    prune_col=config.gold.prune_column,
+    order_by_col=config.gold.order_by_col
+)
 pruned_duration = time.time() - t_start
 
 t_start = time.time()
-merge_batch_unpruned(spark, gold_update_df, config.gold)
+merge_batch_unpruned(
+    spark=spark,
+    target_table_fqdn=gold_fqdn,
+    source_df=gold_update_df,
+    unique_keys=config.gold.unique_keys,
+    order_by_col=config.gold.order_by_col
+)
 unpruned_duration = time.time() - t_start
 
 speedup = unpruned_duration / pruned_duration if pruned_duration > 0 else 1.0
@@ -384,7 +387,7 @@ record_test(
 # COMMAND ----------
 from lakehouse_engine.core.backfill import run_backfill
 
-print("🔄 Executing Historical Backfill for 10-day window...")
+print("🔄 Executing Historical Backfill for date window...")
 t_backfill = time.time()
 
 run_backfill(
