@@ -425,6 +425,27 @@ record_test(
 # COMMAND ----------
 print("💰 Computing FinOps Ingestion Cost Metrics...")
 
+# Attempt to query official Databricks system.billing.usage if available
+system_billing_available = False
+actual_cluster_dbus = None
+
+try:
+    cluster_id = spark.conf.get("spark.databricks.clusterUsageTags.clusterId", "")
+    if cluster_id:
+        sys_df = spark.sql(f"""
+            SELECT SUM(usage_quantity) AS billed_dbus
+            FROM system.billing.usage
+            WHERE usage_metadata.cluster_id = '{cluster_id}'
+              AND usage_date >= CURRENT_DATE() - INTERVAL 1 DAY
+        """).collect()
+        if sys_df and sys_df[0]["billed_dbus"] is not None:
+            actual_cluster_dbus = float(sys_df[0]["billed_dbus"])
+            system_billing_available = True
+            print(f"🎯 Databricks System Tables Active: {actual_cluster_dbus:.4f} actual billed DBUs recorded for this cluster.")
+except Exception as sys_err:
+    # Expected on Free Tier / Community Edition / workspaces without system schema enablement
+    print("ℹ️ Databricks system.billing.usage not accessible (Free Tier or system schemas disabled). Using real-time audit telemetry model.")
+
 # 1. Extract Isolated Production Micro-Batch Metrics from Audit Telemetry
 audit_rows_list = spark.table(audit_fqdn).filter(F.col("batch_id") == 0).collect()
 if audit_rows_list:
