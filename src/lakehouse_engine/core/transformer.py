@@ -49,7 +49,11 @@ def transform_entity(df: DataFrame, config: TargetTableConfig, payload_col_name:
     # 2. Evaluate expressions
     select_exprs = []
     for field in config.fields:
-        select_exprs.append(F.expr(field.expr).cast(field.type).alias(field.name))
+        if field.type.lower() == "variant" and not any(fn in field.expr.lower() for fn in ["parse_json", "variant"]):
+            # Produce parsed binary VARIANT object rather than variant string scalar
+            select_exprs.append(F.expr(f"try_parse_json({field.expr})").alias(field.name))
+        else:
+            select_exprs.append(F.expr(field.expr).cast(field.type).alias(field.name))
 
     transformed = prepared_df.select(*select_exprs)
 
