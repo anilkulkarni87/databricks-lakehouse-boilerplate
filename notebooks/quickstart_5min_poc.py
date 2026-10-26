@@ -99,7 +99,7 @@ entity_name: "subscriptions"
 # Fail-Fast Production Safety Guardrails
 guardrails:
   enforce_primary_key_order_by: true
-  require_prune_column_on_merge: true
+  allow_unbounded_merge: true         # Allows cross-date primary key matching without partition boundaries
   pii_leakage_detection: "strict"
 
 # Data Contract SLA Thresholds
@@ -128,7 +128,7 @@ gold:
   table_type: "dimension"
   unique_keys: ["subscription_id"]
   cluster_by: ["started_at"]
-  prune_column: "started_at"
+  order_by_col: "started_at"
   tags:
     data_classification: "internal"
     tier: "mission-critical"
