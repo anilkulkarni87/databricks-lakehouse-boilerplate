@@ -56,7 +56,13 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {landing_schema}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {test_schema}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS {test_schema}.checkpoints")
 
-print(f"✅ Test Schemas initialized: '{landing_schema}' and '{test_schema}'")
+# Clean previous test tables to guarantee deterministic, isolated test state
+spark.sql(f"DROP TABLE IF EXISTS {test_schema}.dim_subscriptions")
+spark.sql(f"DROP TABLE IF EXISTS {test_schema}.dim_subscriptions_dlq")
+spark.sql(f"DROP TABLE IF EXISTS {test_schema}.dim_subscriber_profiles_pii")
+spark.sql(f"DROP TABLE IF EXISTS {test_schema}.dim_batch_audit")
+
+print(f"✅ Test Schemas initialized and clean test state established: '{test_schema}'")
 
 # COMMAND ----------
 # MAGIC %md
@@ -208,7 +214,7 @@ gold:
       expr: "xxhash64(email)"
       type: "bigint"
     - name: "client_headers"
-      expr: "deviceContext"
+      expr: "try_parse_json(deviceContext)"
       type: "variant"
 
 pii_splits:

@@ -97,12 +97,14 @@ def run_backfill(
             table_comment=config.gold.table_comment,
             fields=config.gold.fields
         )
+        effective_prune_col = None if (config.guardrails and config.guardrails.allow_unbounded_merge) else config.gold.prune_column
+
         merge_batch_pruned(
             spark=spark,
             target_table_fqdn=config.gold.fqdn,
             source_df=clean_gold_df,
             unique_keys=config.gold.unique_keys,
-            prune_col=config.gold.prune_column,
+            prune_col=effective_prune_col,
             order_by_col="updated_at" if "updated_at" in clean_gold_df.columns else None
         )
 
