@@ -95,8 +95,8 @@ landing_df = base_df.select(
     F.lit(True).alias("autoRenew"),
     (F.col("id") % 5).cast(IntegerType()).alias("renewalCount"),
     
-    (F.current_timestamp() - F.expr("INTERVAL (id % 30) DAYS")).alias("startedOn"),
-    (F.current_timestamp() - F.expr("INTERVAL (id % 10) HOURS")).alias("updatedOn"),
+    F.from_unixtime(F.unix_timestamp() - (F.col("id") % 30) * 86400).cast("timestamp").alias("startedOn"),
+    F.from_unixtime(F.unix_timestamp() - (F.col("id") % 10) * 3600).cast("timestamp").alias("updatedOn"),
     
     F.concat(F.lit("user_"), F.col("id_num"), F.lit("@example.com")).alias("email"),
     F.concat(F.lit("Customer "), F.col("id_num")).alias("customerName"),
