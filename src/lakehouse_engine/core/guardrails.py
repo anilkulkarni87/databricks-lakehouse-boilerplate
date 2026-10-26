@@ -38,6 +38,9 @@ class LintReport:
     def warning_count(self) -> int:
         return sum(1 for f in self.findings if f.level == "WARNING")
 
+    def to_cli_output(self) -> str:
+        return self.format_console_report()
+
     def format_console_report(self) -> str:
         status_symbol = "✅ PASS" if self.is_valid else "❌ FAIL"
         lines = [
@@ -267,3 +270,7 @@ def lint_file_or_directory(path: Union[str, Path]) -> Tuple[bool, List[LintRepor
             all_passed = False
 
     return all_passed, reports
+
+
+# Backward compatibility alias
+validate_pipeline_guardrails = lint_pipeline_config

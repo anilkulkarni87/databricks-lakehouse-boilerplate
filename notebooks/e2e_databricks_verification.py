@@ -123,7 +123,7 @@ print(f"✅ Created Landing Table '{landing_table_fqdn}' with {row_count:,} rows
 
 # COMMAND ----------
 from lakehouse_engine.models.config import EntityPipelineConfig
-from lakehouse_engine.core.guardrails import validate_pipeline_guardrails
+from lakehouse_engine.core.guardrails import lint_pipeline_config
 
 test_yaml_template = """
 pipeline:
@@ -234,9 +234,9 @@ resolved_yaml = test_yaml_template.replace("{CATALOG}", catalog_name)
 config_dict = yaml.safe_load(resolved_yaml)
 config = EntityPipelineConfig(**config_dict)
 
-report = validate_pipeline_guardrails(config)
+report = lint_pipeline_config(config)
 print("🛡 Pre-Flight Guardrails Check:")
-print(report.to_cli_output())
+print(report.format_console_report())
 assert report.error_count == 0, "Configuration failed guardrails!"
 
 # COMMAND ----------
