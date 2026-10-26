@@ -10,7 +10,7 @@ The **Lakehouse Engine Databricks Test Plan** establishes a rigorous, production
 
 1. **Delta Engine Realities**: Photon hardware acceleration, Liquid Clustering (`CLUSTER BY`), native binary `VARIANT` decoding, and file-level metadata pruning.
 2. **Streaming Resilience & Fault Tolerance**: Micro-batch state recovery, spot instance node preemption (`SIGTERM`), and zero-data-loss checkpoint replay.
-3. **High-Throughput Performance**: Scaling from $10^4$ to $10^7$ rows with memory spill analysis and pruned vs. unpruned MERGE latency benchmarks.
+3. **High-Throughput Performance**: Scaling from 10,000 to 10,000,000 records with memory spill analysis and pruned vs. unpruned MERGE latency benchmarks.
 4. **Data Governance & Integrity**: Unity Catalog metadata tags, column comments, PII segregation via cryptographic hashing, and declarative circuit breakers.
 5. **FinOps & Cost Accountability**: DBU attribution via Databricks System Tables (`system.billing.usage`), compute tier economics, and storage compaction savings.
 
@@ -142,6 +142,12 @@ ORDER BY total_dbus_consumed DESC;
 
 #### 2. Cost Per Million Records Ingested
 By correlating Delta audit telemetry (`dim_batch_audit`) with cluster DBU rates:
+
+```text
+                          Total Batch Duration (hours) × Cluster DBU Rate × $/DBU
+Unit Cost ($/1M Rows) =  ───────────────────────────────────────────────────────── × 1,000,000
+                                             Source Rows Read
+```
 
 $$\text{Unit Cost (\$/1M Rows)} = \left(\frac{\text{Total Batch Duration (hours)} \times \text{Cluster DBU Rate} \times \text{\$/DBU}}{\text{Source Rows Read}}\right) \times 1,000,000$$
 
